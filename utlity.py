@@ -49,9 +49,16 @@ KILOGRAMS_TO_GRAMS = 10.0**3
 
 class FireAnalysisUtility:
 
-    def __init__(self, input_filename, input_directory) -> None:
-        self.input_filename = input_filename
-        self.input_directory = input_directory
+    def __init__(self, input_filenames, input_directories, output_filepath="") -> None:
+        self.input_filenames = input_filenames
+        self.input_directories = input_directories
+        self.output_filepath = output_filepath
+
+    def extractVariableDataUnits(self, netCDFDataset, variables):
+        units_list = []
+        for variable in variables:
+            units_list.append(netCDFDataset.variables[variable].units)
+        return units_list
 
     class TimeAnalysis:
 
@@ -66,10 +73,14 @@ class FireAnalysisUtility:
             legend_array,
             color_array,
         ) -> None:
+            self.filename = self.input_filenames[0] if self.input_filenames else ""
+            self.directory = self.input_directories[0] if self.input_directories else ""
+
             self.year_start = year_start
             self.year_end = year_end
             self.years_arr = np.arange(year_start, year_end + 1)
-            self.time_netcdf_dataset = nc.Dataset(self.input_filename, "r")
+
+            self.time_netcdf_dataset = nc.Dataset(self.filename, "r")
             self.dataset_area = self.time_netcdf_dataset.variables[area_variable_name]
             self.dataset_earth_surface_area = np.sum(self.dataset_area)
             self.species = species
@@ -102,7 +113,7 @@ class FireAnalysisUtility:
                 plt.grid(True)
                 plt.tight_layout()
                 plt.savefig(
-                    f"{self.input_directory}/plots/fire_repository/Develpment/{species_element}_emissions_by_sector.eps"
+                    f"{self.directory}/plots/fire_repository/Develpment/{species_element}_emissions_by_sector.eps"
                 )
 
         def executeTimeAnalysis(self):
@@ -115,7 +126,7 @@ class FireAnalysisUtility:
                     row_index = 0
                     for simulation_element in self.simulation:
                         # Construct file name
-                        filename = f"{self.input_directory}/{species_element}/{month}_1996.taij{simulation_element}.nc"
+                        filename = f"{self.directory}/{species_element}/{month}_1996.taij{simulation_element}.nc"
                         try:
                             parseDataset = nc.Dataset(filename, "r")
                             for sector in enumerate(self.sectors):
@@ -179,12 +190,34 @@ class FireAnalysisUtility:
             )  # specify fle name
             plt.close()
 
+    class CarbonBudget:
+        def __init__(
+            self, file_one_variables, file_two_variables, file_three_variables
+        ) -> None:
+            self.file_one_variables = file_one_variables
+            self.file_two_variables = file_two_variables
+            self.file_three_variables = file_three_variables
+            self.new_variable_names = [
+                "Biomass emissions",
+                "Atmospheric column load",
+                "Vegatation Carbon",
+                "Soil Carbon",
+                "GPP",
+                "Autotrophic Respiration",
+                "Soil Respiration",
+                "EXCESS C FLUX DUE TO VEG FRACTIONS CHANGE",
+                "   Net Flux = GPP - rauto - soilresp -ecvf",
+                "Ocean Carbon",
+            ]
+
 
 def main():
     # create FireAnalysis class object
     timeAnalysisInstance = FireAnalysisUtility(
-        input_filename="/discover/nobackup/kmezuman/E6TomaF40intpyrEtest/JAN1996.taijE6TomaF40intpyrEtest.nc",
-        input_directory="/discover/nobackup/kmezuman",
+        input_filename=[
+            "/discover/nobackup/kmezuman/E6TomaF40intpyrEtest/JAN1996.taijE6TomaF40intpyrEtest.nc"
+        ],
+        input_directory=["/discover/nobackup/kmezuman"],
     ).TimeAnalysis(
         year_start=1996,
         year_end=1996,
@@ -204,6 +237,7 @@ def main():
         legend_array=["pyrE", "defo", "biomass", "pyrE+defo"],
         color_array=["black", "blue", "red", "magenta", "orange", "green"],
     )
+    timeAnalysisInstance.executeTimeAnalysis()
     pass
 
 
