@@ -1,0 +1,44 @@
+{
+  "selected_script": ["time_analysis", "carbon_budget"],
+  "time_analysis": {
+    "year_start": 1996,
+    "year_end": 1996,
+    "area_variable_name": "axyp",
+    "species": ["NOx", "OCB", "BCB", "NH3", "SO2", "Alkenes", "Paraffin", "CO"],
+    "sectors": ["pyrE_src_hemis", "biomass_src_hemis"],
+    "simulations": ["E6TomaF40intpyrEtest", "E6TomaF40intpyrEtest2"],
+    "legend_array": ["pyrE", "defo", "biomass", "pyrE+defo"],
+    "color_array": ["black", "blue", "red", "magenta", "orange", "green"],
+    "figure_size": [12, 8],
+    "input_file_path": "/discover/nobackup/kmezuman/E6TomaF40intpyrEtest/JAN1996.taijE6TomaF40intpyrEtest.nc",
+    "input_directory_path": "/discover/nobackup/kmezuman"
+  },
+  "panels": {
+    "rows": 5,
+    "columns": 3,
+    "img_paths": [],
+    "total_plots": 15,
+    "output_directory": "./",
+    "plot_figure_size": [20, 15]
+  },
+  "carbon_budget": {
+    "input_files": [
+      "/discover/nobackup/kmezuman/E6TpyrEPD/ANN2010.taijE6TpyrEPD.nc",
+      "/discover/nobackup/kmezuman/E6TpyrEPD/ANN2010.aijE6TpyrEPD.nc",
+      "/discover/nobackup/kmezuman/CCycle_E6obioF40/ANN2009.taijCCycle_E6obioF40.nc"
+    ],
+    "output_file": "carbon_budget.txt",
+    "df_variable_names": [
+      "Biomass emissions",
+      "Atmospheric column load",
+      "Vegatation Carbon",
+      "Soil Carbon",
+      "GPP",
+      "Autotrophic Respiration",
+      "Soil Respiration",
+      "EXCESS C FLUX DUE TO VEG FRACTIONS CHANGE",
+      "   Net Flux = GPP - rauto - soilresp -ecvf",
+      "Ocean Carbon"
+    ]
+  }
+}
