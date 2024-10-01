@@ -55,7 +55,7 @@ class TimeAnalysis:
         self.year_end = year_end
         self.years_arr = np.arange(year_start, year_end + 1)
 
-        self.time_netcdf_dataset = nc.Dataset(self.filename, "r")
+        self.time_netcdf_dataset = nc.Dataset(self.file_path, "r")
         self.dataset_area = self.time_netcdf_dataset.variables[area_variable_name]
         self.dataset_earth_surface_area = np.sum(self.dataset_area)
         self.species = species
