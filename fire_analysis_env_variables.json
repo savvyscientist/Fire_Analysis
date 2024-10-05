@@ -40,5 +40,6 @@
       "   Net Flux = GPP - rauto - soilresp -ecvf",
       "Ocean Carbon"
     ]
-  }
+  },
+  "line_plots": {}
 }
