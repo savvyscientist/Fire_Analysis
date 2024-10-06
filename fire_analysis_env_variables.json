@@ -41,5 +41,21 @@
       "Ocean Carbon"
     ]
   },
-  "line_plots": {}
+  "line_plots": {
+    "netcdf_paths": {
+      "model": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/converted_model_not_nudged.nc",
+      "nudged": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/converted_model_nudged.nc",
+      "gfed": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED_Mha.nc",
+      "lightning_model": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/gfed_model_lightning.nc",
+      "lightning_nudged": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/gfed_model_nudged_lightning.nc",
+      "wglc": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/WLGC_GFED_region_data.nc",
+      "model_anthro": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/lightning_model_result_model.nc",
+      "nudged_anthro": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/lightning_model_result_nudged.nc",
+      "precip_model": "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/model_precipitation.nc",
+      "precip_nudged": "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/nudged_precipitation.nc"
+    },
+    "val": "BA",
+    "unit": "",
+    "output_path": "/discover/nobackup/kmezuman/plots/fire_repository/Hackathon/"
+  }
 }

@@ -335,7 +335,7 @@ def createDataframe(
     saveDataframe(df.to_string(index=False))
 
 
-def handleGFEDLandCoverTypes(
+def Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
     ax_t, color_map, unique_land_cover_types, data_set, gfed_diag
 ):
     std_error = np.zeros(12)
@@ -379,7 +379,7 @@ def handleGFEDLandCoverTypes(
     return (total_burned_across_ilct, monthly_burn, plot_std)
 
 
-def handleGFEDPlot(
+def Data_TS_Season_model_gfed_handleGFEDPlot(
     axis,
     ax_t,
     unit,
@@ -461,7 +461,7 @@ def handleGFEDPlot(
     plt.close()
 
 
-def handleGFEDDiagonalCalculation(gfed_diag, data_set):
+def Data_TS_Season_model_gfed_handleGFEDDiagonalCalculation(gfed_diag, data_set):
     color_iter = iter(DISTINCT_COLORS)
     for diag_idx, diag_name in enumerate(gfed_diag[1:]):
         std_error_total = np.zeros(12)
@@ -484,7 +484,9 @@ def handleGFEDDiagonalCalculation(gfed_diag, data_set):
         #    elinewidth=1)
 
 
-def handleGFEDDiagonalCalculationGen(dataset, dataset_key_index, mask_index, gfed_diag):
+def Data_TS_Season_model_gfed_handleGFEDDiagonalCalculationGen(
+    dataset, dataset_key_index, mask_index, gfed_diag
+):
     color_iter = iter(DISTINCT_COLORS)
     for diag_idx, diag_name in enumerate(gfed_diag[1:]):
         std_error_total = np.zeros(12)
@@ -508,7 +510,7 @@ def handleGFEDDiagonalCalculationGen(dataset, dataset_key_index, mask_index, gfe
     #    elinewidth=1)
 
 
-def handleGFEDLandCoverTypesGen(
+def Data_TS_Season_model_gfed_handleGFEDLandCoverTypesGen(
     dataset, dataset_key_index, gfed_diag, unique_land_cover_types, mask_index
 ):
     std_error = np.zeros(12)
@@ -564,7 +566,7 @@ def handleGFEDLandCoverTypesGen(
     return (total_burned_across_ilct, monthly_burn, plot_std)
 
 
-def handleGFED(
+def Data_TS_Season_model_gfed_handle_GFED(
     dataset, mask_index, dataset_key_index, netcdf_path, axis, unit, output_path
 ):
     fig_t, ax_t = plt.subplots(figsize=(12, 8), tight_layout=True)
@@ -582,11 +584,13 @@ def handleGFED(
         gd = data_set.data_vars
         gfed_diag = list(gd.keys())
 
-        total_burned_across_ilct, monthly_burn, plot_std = handleGFEDLandCoverTypes(
-            ax_t, color_map, unique_land_cover_types, data_set, gfed_diag
+        total_burned_across_ilct, monthly_burn, plot_std = (
+            Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
+                ax_t, color_map, unique_land_cover_types, data_set, gfed_diag
+            )
         )
 
-        handleGFEDPlot(
+        Data_TS_Season_model_gfed_handleGFEDPlot(
             axis,
             ax_t,
             unit,
@@ -597,15 +601,21 @@ def handleGFED(
             total_burned_across_ilct,
         )
 
-        handleGFEDDiagonalCalculation(gfed_diag, data_set)
+        Data_TS_Season_model_gfed_handleGFEDDiagonalCalculation(gfed_diag, data_set)
 
     else:
 
-        total_burned_across_ilct, monthly_burn, plot_std = handleGFEDLandCoverTypesGen(
-            dataset, dataset_key_index, gfed_diag, unique_land_cover_types, mask_index
+        total_burned_across_ilct, monthly_burn, plot_std = (
+            Data_TS_Season_model_gfed_handleGFEDLandCoverTypesGen(
+                dataset,
+                dataset_key_index,
+                gfed_diag,
+                unique_land_cover_types,
+                mask_index,
+            )
         )
 
-        handleGFEDPlot(
+        Data_TS_Season_model_gfed_handleGFEDPlot(
             axis,
             ax_t,
             unit,
@@ -667,14 +677,14 @@ def handleGFED(
         # plt.savefig(file_path, dpi=300, bbox_inches="tight")
 
         # plt.close()
-        handleGFEDDiagonalCalculationGen(
+        Data_TS_Season_model_gfed_handleGFEDDiagonalCalculationGen(
             dataset, dataset_key_index, mask_index, gfed_diag
         )
 
     pass
 
 
-def handleWGLC(dataset, mask_index, dataset_key_index, axis):
+def Data_TS_Season_model_gfed_handle_WGLC(dataset, mask_index, dataset_key_index, axis):
     print("wglc")
     color_iter = iter(DISTINCT_COLORS)
     time_dt = dataset[dataset_key_index]["time"].values
@@ -718,7 +728,7 @@ def handleWGLC(dataset, mask_index, dataset_key_index, axis):
         )
 
 
-def handleSeasonalityElse(
+def Data_TS_Season_model_gfed_handle_else(
     dataset, diagnostics_list, value, mask_index, axis, dataset_key_index
 ):
     color_iter = iter(DISTINCT_COLORS)
@@ -811,12 +821,11 @@ def Data_TS_Season_model_gfed(
 
         # Not needed anymore due to making them available in each individual function
         # color_map = plt.get_cmap("tab20")
-
         # color_iter = iter(DISTINCT_COLORS)
 
         for idx in opened_datasets.keys():
             if idx == "gfed":
-                handleGFED(
+                Data_TS_Season_model_gfed_handle_GFED(
                     dataset=opened_datasets,
                     mask_index=i,
                     dataset_key_index=idx,
@@ -826,7 +835,7 @@ def Data_TS_Season_model_gfed(
                     output_path=output_path,
                 )
             elif idx == "wglc":
-                handleWGLC(
+                Data_TS_Season_model_gfed_handle_WGLC(
                     dataset=opened_datasets,
                     mask_index=i,
                     dataset_key_index=idx,
@@ -834,7 +843,7 @@ def Data_TS_Season_model_gfed(
                 )
 
             else:
-                handleSeasonalityElse(
+                Data_TS_Season_model_gfed_handle_else(
                     dataset=opened_datasets,
                     diagnostics_list=diagnostics_list,
                     value=val,
@@ -851,6 +860,425 @@ def Data_TS_Season_model_gfed(
             dataset_key_index=idx,
             output_path=output_path,
         )
+
+
+def Data_TS_Season_Regional_handleGFEDLandCoverTypes(
+    axis, ax_t, netcdf_filepath, time_gf, unique_land_cover_types
+):
+    color_map = plt.get_cmap("tab20")
+    color_iter = iter(DISTINCT_COLORS)
+    dataset = xr.open_dataset(netcdf_filepath)
+    time_dt = dataset["time"].values
+    time_15 = pd.to_datetime(time_dt)
+    gd = dataset.data_vars
+    gfed_diag = list(gd.keys())
+    for ilct_idx, ilct in enumerate(unique_land_cover_types):
+        total_burn_area_ilct_15 = dataset[gfed_diag[0]][:, ilct_idx]
+
+        ax_t.plot(
+            time_15,
+            total_burn_area_ilct_15,
+            label=f"iLCT {ilct}: {LAND_COVER_LABELS[ilct]}",
+            color=color_map(ilct_idx),
+        )
+    for diag_idx, diag_name in enumerate(gfed_diag[1:]):
+        color = next(color_iter)
+
+        axis.plot(
+            time_15,
+            d[diag_name][:],
+            label=f"{diag_name}",
+            color=color,
+            linewidth=1.5,
+        )
+    total_burn_area_total_ilct = np.sum(dataset[gfed_diag[0]][:, :], axis=-1)
+    ax_t.plot(
+        time_gf,
+        total_burn_area_total_ilct,
+        label="Total ILCT",
+        color="black",
+        linewidth=1.5,
+    )
+
+
+def Data_TS_Season_Regional_handleGFEDLandCoverGen(
+    dataset,
+    axis,
+    mask_index,
+    dataset_key_index,
+    ax_t,
+    gfed_diag,
+    time_gf,
+    unique_land_cover_types,
+):
+    color_map = plt.get_cmap("tab20")
+    color_iter = iter(DISTINCT_COLORS)
+    for ilct_idx, ilct in enumerate(unique_land_cover_types):
+        total_burn_area_ilct = dataset[dataset_key_index][gfed_diag[0]][
+            :, mask_index, ilct_idx
+        ]
+
+        ax_t.plot(
+            time_gf,
+            total_burn_area_ilct,
+            label=f"iLCT {ilct}: {LAND_COVER_LABELS[ilct]}",
+            color=color_map(ilct_idx),
+        )
+
+    for diag_idx, diag_name in enumerate(gfed_diag[1:]):
+        color = next(color_iter)
+
+        axis.plot(
+            time_gf,
+            dataset[dataset_key_index][gfed_diag[diag_idx + 1]][:, i],
+            label=f"{diag_name}",
+            color=color,
+            linewidth=1.5,
+        )
+    total_burn_area_total_ilct = np.sum(
+        dataset[dataset_key_index][gfed_diag[0]][:, mask_index, :], axis=-1
+    )
+    return total_burn_area_total_ilct
+
+
+def Data_TS_Season_Regional_handleGFEDPlot(
+    axis, mask_index, output_path, ax_t, time_gf, total_burn_area_total_ilct
+):
+    ax_t.plot(
+        time_gf,
+        total_burn_area_total_ilct,
+        label="Total ILCT",
+        color="black",
+        linewidth=1.5,
+    )
+    axis.plot(
+        time_gf,
+        total_burn_area_total_ilct,
+        label="NAT",
+        color="black",
+        linewidth=1.5,
+    )
+    ax_t.set_xlabel("Time")
+    ax_t.set_ylabel("Total Burned Area [Mha]")
+    ax_t.set_title(
+        f"Total Burned Area for Mask Value {GFED_COVER_LABELS[mask_index]} and Different iLCT Types"
+    )
+    ax_t.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.25),
+        fancybox=True,
+        shadow=True,
+        ncol=5,
+    )
+    ax_t.xaxis.set_major_locator(mdates.YearLocator())
+    ax_t.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    # plt.xticks(rotation=45)
+    ax_t.tick_params(axis="x", rotation=45)
+    plt.subplots_adjust(hspace=1.5)
+    file_name_t = f"NATBA_TS_gfed{GFED_COVER_LABELS[mask_index]}_1997_2020.png"
+    file_path_t = os.path.join(output_path, file_name_t)
+    plt.savefig(file_path_t, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+def Data_TS_Season_Regional_handle_GFED(
+    dataset,
+    axis,
+    mask_index,
+    dataset_key_index,
+    output_path,
+    netcdf_filepath="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/15th_region.nc",
+):
+    fig_t, ax_t = plt.subplots(figsize=(12, 8), tight_layout=True)
+    color_map = plt.get_cmap("tab20")
+    gd = dataset["gfed"].data_vars
+    gfed_diag = list(gd.keys())
+
+    time_dt = dataset[dataset_key_index]["time"].values
+    time_gf = pd.to_datetime(time_dt)
+
+    unique_land_cover_types = dataset["gfed"]["ilct"].values
+
+    # Iterate through each ilct type
+    # if 'Total' in target_data.variables and 'Norm' in target_data.variables:
+
+    if mask_index == 15:
+        Data_TS_Season_Regional_handleGFEDLandCoverTypes(
+            axis, ax_t, netcdf_filepath, time_gf, unique_land_cover_types
+        )
+
+    else:
+        total_burn_area_total_ilct = Data_TS_Season_Regional_handleGFEDLandCoverGen(
+            dataset,
+            axis,
+            mask_index,
+            dataset_key_index,
+            ax_t,
+            gfed_diag,
+            time_gf,
+            unique_land_cover_types,
+        )
+
+    Data_TS_Season_Regional_handleGFEDPlot(
+        axis, mask_index, output_path, ax_t, time_gf, total_burn_area_total_ilct
+    )
+
+
+def Data_TS_Season_Regional_handle_WGL(dataset, axis, mask_index, dataset_key_index):
+    print("wglc")
+    color_iter = iter(DISTINCT_COLORS)
+    time_dt = dataset[dataset_key_index]["time"].values
+    time = pd.to_datetime(time_dt)
+
+    wg = dataset["wglc"].data_vars
+    wd_diag = list(wg.keys())
+    for diag_idx, diag_name in enumerate(wd_diag):
+        color = next(color_iter)
+        axis.plot(
+            time,
+            dataset[dataset_key_index][diag_name][:, mask_index],
+            label="Lightning Density WGLC",
+            color=color,
+            linewidth=1.5,
+        )
+
+
+def Data_TS_Season_Regional_handle_else(
+    dataset, diagnostics_list, axis, mask_index, dataset_key_index
+):
+    color_iter = iter(DISTINCT_COLORS)
+    for idn, diag in enumerate(diagnostics_list):
+        time_dt = dataset[dataset_key_index]["time"].values
+        time = pd.to_datetime(time_dt)
+        # print(opened_datasets[idx][diag][:, i])
+
+        color = next(color_iter)
+        axis.plot(
+            time,
+            dataset[dataset_key_index][diag][:, mask_index],
+            label=f"{dataset_key_index} {diag}",
+            color=color,
+            linewidth=1.5,
+        )
+
+
+def Data_TS_Season_Regional_plot_mask(
+    axis, value, unit, output_path, mask_index, dataset_key_index
+):
+    axis.set_xlabel("Time")
+    axis.set_ylabel(f"Total {value} {unit}")
+    axis.set_title(f"Total {value} for Mask Value {GFED_COVER_LABELS[mask_index]}")
+    axis.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.25),
+        fancybox=True,
+        shadow=True,
+        ncol=5,
+    )
+
+    # Set x-axis tick positions to one year interval
+    axis.xaxis.set_major_locator(mdates.YearLocator())
+    axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    # plt.xticks(rotation=45)
+    axis.tick_params(axis="x", rotation=45)
+    plt.subplots_adjust(hspace=1.5)
+
+    # BA_TS_<region name>_<startyear>_<endyear>
+
+    file_name = (
+        f"{value}_{dataset_key_index}_TS_{GFED_COVER_LABELS[mask_index]}_1997_2020.png"
+    )
+    file_path = os.path.join(output_path, file_name)
+    plt.savefig(file_path, dpi=300, bbox_inches="tight")
+    plt.close()  # Close the first figure after saving
+    print("Complete ", file_name)
+    # plt.show()
+
+
+# read from netcdf
+def Data_TS_Season_Regional(
+    opened_datasets, diagnostics_list, val, unit, output_path, figure_shape=(12, 8)
+):
+
+    for i in MASK_LIST:
+        fig, ax = plt.subplots(figsize=figure_shape, tight_layout=True)
+
+        color_map = plt.get_cmap("tab20")
+
+        color_iter = iter(DISTINCT_COLORS)
+
+        for idx in opened_datasets.keys():
+
+            if idx == "gfed":
+                Data_TS_Season_Regional_handle_GFED(
+                    dataset=opened_datasets,
+                    axis=ax,
+                    mask_index=i,
+                    dataset_key_index=idx,
+                    output_path=output_path,
+                    netcdf_filepath="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/15th_region.nc",
+                )
+
+            elif idx == "wglc":
+                Data_TS_Season_Regional_handle_WGL(
+                    dataset=opened_datasets,
+                    axis=ax,
+                    mask_index=i,
+                    dataset_key_index=idx,
+                )
+
+            else:
+                Data_TS_Season_Regional_handle_else(
+                    dataset=opened_datasets,
+                    diagnostics_list=diagnostics_list,
+                    axis=ax,
+                    mask_index=i,
+                    dataset_key_index=idx,
+                )
+    Data_TS_Season_Regional_plot_mask(
+        axis=ax,
+        value=val,
+        unit=unit,
+        output_path=output_path,
+        mask_index=i,
+        dataset_key_index=idx,
+    )
+
+
+def handleLinePlotRun(netcdf_paths, output_path, val, unit):
+    if val == "BA":
+        opened_datasets = {}
+        # obs = input("Observation product: yes or no ")
+        obs = "yes"
+
+        if obs.lower() == "yes":
+            unit = "Mha"
+
+            print("loading gfed")
+            file_path = netcdf_paths["gfed"]
+            gfed = xr.open_dataset(file_path)
+            opened_datasets["gfed"] = gfed
+            print("loaded")
+
+        list_of_sim = ["model", "nudged"]
+
+        # Number of simulations to choose
+        # num_inputs = int(input("How many simulations? "))
+        num_inputs = 1
+
+        # print("List of simulations to choose from:", list_of_sim)
+
+        # Initialize a dictionary to store the opened datasets
+
+        # Loop to get simulation inputs
+        for i in range(num_inputs):
+            # user_input = input(f"Enter simulation {i+1}: ")
+            user_input = "model"
+            if user_input in list_of_sim:
+                file_path = netcdf_paths[user_input]
+                model = xr.open_dataset(file_path)
+                model["BA_Mha"] = (
+                    model["BA_tree_Mha"] + model["BA_grass_Mha"] + model["BA_shrub_Mha"]
+                )
+                opened_datasets[user_input] = model
+
+            else:
+                print(f"Invalid simulation: {user_input}")
+        # diag_input = input('Specify diagnostics from {BA_Mha, BA_shrub_Mha, BA_grass_Mha, BA_tree_Mha}')
+        diag_input = "BA_Mha"
+        diagnostics_list = diag_input.split(",")
+
+        print("Plotting...")
+        output_path = output_path + "BA/"
+        # Data_TS_Season_Regional(opened_datasets, diagnostics_list,val,unit,output_path)
+        Data_TS_Season_model_gfed(
+            opened_datasets, diagnostics_list, val, unit, output_path
+        )
+    elif val == "Lightning":
+        unit = "[strokes/km²/day]"
+        opened_datasets = {}
+        obs = input("Observation product: yes or no ")
+        if obs.lower() == "yes":
+
+            print("loading wglc")
+            file_path = netcdf_paths["wglc"]
+            wglc = xr.open_dataset(file_path)
+            opened_datasets["wglc"] = wglc
+            print("loaded")
+
+            # List of available simulations
+        list_of_sim = [
+            "lightning_model",
+            "lightning_nudged",
+            "model_anthro",
+            "nudged_anthro",
+        ]
+
+        # Number of simulations to choose
+        num_inputs = int(input("How many simulations? "))
+
+        print("List of simulations to choose from:", list_of_sim)
+
+        # Loop to get simulation inputs
+        for i in range(num_inputs):
+            user_input = input(f"Enter simulation {i+1}: ")
+            if user_input in list_of_sim:
+                file_path = netcdf_paths[user_input]
+                model = xr.open_dataset(file_path)
+                opened_datasets[user_input] = model
+                print(f"Opened {user_input} dataset")
+            else:
+                print(f"Invalid simulation: {user_input}")
+
+        diag_input = input(
+            "Specify diagnostics from {f_ignCG for modelVs nudged and f_ignHUMAN for anthro}"
+        )
+        diagnostics_list = diag_input.split(",")
+
+        # Trim and convert to lowercase for consistency
+        diagnostics_list = [diag.strip() for diag in diagnostics_list]
+        output_path = output_path + "Lightning/"
+        Data_TS_Season_Regional(
+            opened_datasets, diagnostics_list, val, unit, output_path
+        )
+        Data_TS_Season_model_gfed(
+            opened_datasets, diagnostics_list, val, unit, output_path
+        )
+
+    elif val == "Precip":
+        unit = "[mm/day]"
+        opened_datasets = {}
+        list_of_sim = ["precip_model", "precip_nudged"]
+        # Number of simulations to choose
+        num_inputs = int(input("How many simulations? "))
+
+        print("List of simulations to choose from:", list_of_sim)
+
+        # Loop to get simulation inputs
+        for i in range(num_inputs):
+            user_input = input(f"Enter simulation {i+1}: ")
+            if user_input in list_of_sim:
+                file_path = netcdf_paths[user_input]
+                model = xr.open_dataset(file_path)
+                opened_datasets[user_input] = model
+                print(f"Opened {user_input} dataset")
+            else:
+                print(f"Invalid simulation: {user_input}")
+
+        diag_input = input("Specify diagnostics from {FLAMM_prec}")
+        diagnostics_list = diag_input.split(",")
+
+        # Trim and convert to lowercase for consistency
+        diagnostics_list = [diag.strip() for diag in diagnostics_list]
+        output_path = output_path + "Precip/"
+        Data_TS_Season_Regional(
+            opened_datasets, diagnostics_list, val, unit, output_path
+        )
+        Data_TS_Season_model_gfed(
+            opened_datasets, diagnostics_list, val, unit, output_path
+        )
+    else:
+        print("Invalid input for 'BA' or 'Lightning' or 'Precip'")
 
 
 def utilityRunner():
@@ -908,6 +1336,14 @@ def utilityRunner():
                 )
             except:
                 print("[-] Failed to run script")
+        elif script == "line_plots":
+            script_env_data = env_json[script]
+            handleLinePlotRun(
+                netcdf_paths=script_env_data["netcdf_paths"],
+                output_path=script_env_data["output_path"],
+                val=script_env_data["val"],
+                unit=script_env_data["unit"],
+            )
 
 
 def main():
