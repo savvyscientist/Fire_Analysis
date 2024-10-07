@@ -110,6 +110,7 @@ NUM_MONTHS = len(MONTHLIST)
 MARKER = "o"
 SECONDS_IN_A_YEAR = 60.0 * 60.0 * 24.0 * 365.0
 KILOGRAMS_TO_GRAMS = 10.0**3
+COLOR_MAP = plt.get_cmap("tab20")
 
 
 def getEnvironmentVariables():
@@ -336,7 +337,7 @@ def createDataframe(
 
 
 def Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
-    ax_t, color_map, unique_land_cover_types, data_set, gfed_diag
+    ax_t, unique_land_cover_types, data_set, gfed_diag
 ):
     std_error = np.zeros(12)
     plot_std = np.zeros(12)
@@ -362,7 +363,7 @@ def Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
             MONTHS_NUM,
             monthly_burn[ilct_idx],
             label=f"iLCT {ilct}: {LAND_COVER_LABELS[ilct]}",
-            color=color_map(ilct_idx),
+            color=COLOR_MAP(ilct_idx),
         )
 
         ax_t.errorbar(
@@ -371,7 +372,7 @@ def Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
             yerr=std_error,
             fmt="none",
             capsize=9,
-            color=color_map(ilct_idx),
+            color=COLOR_MAP(ilct_idx),
             elinewidth=1,
         )
 
@@ -548,7 +549,7 @@ def Data_TS_Season_model_gfed_handleGFEDLandCoverTypesGen(
             MONTHS_NUM,
             monthly_burn[ilct_idx],
             label=f"iLCT {ilct}: {LAND_COVER_LABELS[ilct]}",
-            color=color_map(ilct_idx),
+            color=COLOR_MAP(ilct_idx),
         )
 
         ax_t.errorbar(
@@ -557,7 +558,7 @@ def Data_TS_Season_model_gfed_handleGFEDLandCoverTypesGen(
             yerr=std_error,
             fmt="none",
             capsize=9,
-            color=color_map(ilct_idx),
+            color=COLOR_MAP(ilct_idx),
             elinewidth=1,
         )
     total_burned_across_ilct = np.sum(
@@ -586,7 +587,7 @@ def Data_TS_Season_model_gfed_handle_GFED(
 
         total_burned_across_ilct, monthly_burn, plot_std = (
             Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
-                ax_t, color_map, unique_land_cover_types, data_set, gfed_diag
+                ax_t, unique_land_cover_types, data_set, gfed_diag
             )
         )
 
@@ -865,7 +866,6 @@ def Data_TS_Season_model_gfed(
 def Data_TS_Season_Regional_handleGFEDLandCoverTypes(
     axis, ax_t, netcdf_filepath, time_gf, unique_land_cover_types
 ):
-    color_map = plt.get_cmap("tab20")
     color_iter = iter(DISTINCT_COLORS)
     dataset = xr.open_dataset(netcdf_filepath)
     time_dt = dataset["time"].values
@@ -879,7 +879,7 @@ def Data_TS_Season_Regional_handleGFEDLandCoverTypes(
             time_15,
             total_burn_area_ilct_15,
             label=f"iLCT {ilct}: {LAND_COVER_LABELS[ilct]}",
-            color=color_map(ilct_idx),
+            color=COLOR_MAP(ilct_idx),
         )
     for diag_idx, diag_name in enumerate(gfed_diag[1:]):
         color = next(color_iter)
@@ -911,7 +911,6 @@ def Data_TS_Season_Regional_handleGFEDLandCoverGen(
     time_gf,
     unique_land_cover_types,
 ):
-    color_map = plt.get_cmap("tab20")
     color_iter = iter(DISTINCT_COLORS)
     for ilct_idx, ilct in enumerate(unique_land_cover_types):
         total_burn_area_ilct = dataset[dataset_key_index][gfed_diag[0]][
@@ -922,7 +921,7 @@ def Data_TS_Season_Regional_handleGFEDLandCoverGen(
             time_gf,
             total_burn_area_ilct,
             label=f"iLCT {ilct}: {LAND_COVER_LABELS[ilct]}",
-            color=color_map(ilct_idx),
+            color=COLOR_MAP(ilct_idx),
         )
 
     for diag_idx, diag_name in enumerate(gfed_diag[1:]):
@@ -1093,7 +1092,7 @@ def Data_TS_Season_Regional_plot_mask(
     plt.close()  # Close the first figure after saving
     print("Complete ", file_name)
     # plt.show()
-
+    
 
 # read from netcdf
 def Data_TS_Season_Regional(
