@@ -336,6 +336,132 @@ def createDataframe(
     saveDataframe(df.to_string(index=False))
 
 
+# xlabel_name = Time or Month
+def line_plot_mask(
+    axis,
+    output_path,
+    xlabel_name,
+    ylabel_name,
+    title_name,
+    output_file_name,
+    rotation_type,
+):
+    axis.set_xlabel(xlabel_name, fontsize=18)
+    axis.set_ylabel(ylabel_name, fontsize=18)
+    axis.set_title(title_name)
+    axis.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.25),
+        fancybox=True,
+        shadow=True,
+        ncol=5,
+    )
+
+    if rotation_type == "Seasonal":
+        plt.xticks(rotation=45, fontsize=18)
+        plt.yticks(fontsize=18)
+        plt.yscale("linear")
+    elif rotation_type == "Regional":
+        axis.xaxis.set_major_locator(mdates.YearLocator())
+        axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    # ax.set_xlim(0.5, 12.5)
+
+    axis.tick_params(axis="x", rotation=45)
+    plt.subplots_adjust(hspace=1.5)
+
+    # NATBA_TS_<region name>_<startyear>_<endyear>
+    file_path = os.path.join(output_path, output_file_name)
+    plt.grid(True)
+    plt.savefig(file_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print("Complete ", output_file_name)
+
+
+def wglc_line_plots(dataset, axis, mask_index, dataset_key_index, monthly=True):
+    print("wglc")
+    color_iter = iter(DISTINCT_COLORS)
+    time_dt = dataset[dataset_key_index]["time"].values
+    time = pd.to_datetime(time_dt)
+
+    wg = dataset["wglc"].data_vars
+    wd_diag = list(wg.keys())
+    if monthly == True:
+        for diag_idx, diag_name in enumerate(wd_diag):
+            std_error_total = np.zeros(12)
+
+            monthly_burn_total = np.zeros(len(MONTHS_NUM))
+            monthly_burn_count_total = np.zeros(len(MONTHS_NUM))
+            color = next(color_iter)
+            for month in range(len(MONTHS_NUM)):
+                total_burn_area_mask = dataset[dataset_key_index][wd_diag[diag_idx]][
+                    :132, mask_index
+                ]
+                monthly_burn_total[month] = np.mean(total_burn_area_mask[month::12])
+                monthly_burn_count_total[month] = np.count_nonzero(
+                    total_burn_area_mask[month::12]
+                )
+                std_error_total[month] = np.std(
+                    total_burn_area_mask[month::12]
+                ) / np.sqrt(monthly_burn_count_total[month])
+
+                axis.plot(
+                    MONTHS_NUM,
+                    monthly_burn_total,
+                    label=f"{dataset_key_index}{diag_name}",
+                    color=color,
+                )
+                axis.errorbar(
+                    MONTHS_NUM,
+                    monthly_burn_total,
+                    yerr=std_error_total,
+                    fmt="none",
+                    capsize=9,
+                    color=color,
+                    elinewidth=1,
+                )
+
+    elif monthly == False:
+        for diag_idx, diag_name in enumerate(wd_diag):
+            color = next(color_iter)
+            axis.plot(
+                time,
+                dataset[dataset_key_index][diag_name][:, mask_index],
+                label="Lightning Density WGLC",
+                color=color,
+                linewidth=1.5,
+            )
+
+
+def line_plot_gfed_diagonal_calculation(
+    gfed_diag, dataset, dataset_key_index, mask_index
+):
+    color_iter = iter(DISTINCT_COLORS)
+    for diag_idx, diag_name in enumerate(gfed_diag[1:]):
+        std_error_total = np.zeros(12)
+
+        monthly_burn_total = np.zeros(len(MONTHS_NUM))
+        monthly_burn_count_total = np.zeros(len(MONTHS_NUM))
+        color = next(color_iter)
+        for month in range(len(MONTHS_NUM)):
+            # ternary operation distinguishing this function between the seasonal and monthly
+            total_burn_area_mask = (
+                dataset[diag_name][:]
+                if mask_index == 15
+                else dataset[dataset_key_index][gfed_diag[diag_idx + 1]][:, mask_index]
+            )
+            monthly_burn_total[month] = np.mean(total_burn_area_mask[month::12])
+            monthly_burn_count_total[month] = np.count_nonzero(
+                total_burn_area_mask[month::12]
+            )
+            std_error_total[month] = np.std(total_burn_area_mask[month::12]) / np.sqrt(
+                monthly_burn_count_total[month]
+            )
+
+        # ax.plot(MONTHS_NUM, monthly_burn_total, label=f"{diag_name} Burned Area {unit}", color=color)
+        # ax.errorbar(MONTHS_NUM, monthly_burn_total, yerr=std_error_total, fmt='none', capsize=9, color=color,
+        #    elinewidth=1)
+
+
 def Data_TS_Season_model_gfed_handleGFEDLandCoverTypes(
     ax_t, unique_land_cover_types, data_set, gfed_diag
 ):
@@ -438,77 +564,43 @@ def Data_TS_Season_model_gfed_handleGFEDPlot(
         color="black",
     )
 
-    # ax_t.errorbar(MONTHS_NUM, total_burned_across_ilct, yerr=total_burned_
-    ax_t.set_xlabel("Time")
-    ax_t.set_ylabel(f"Total Burned Area [{unit}]")
-    ax_t.set_title(
-        f"Total Burned Area for Mask Value {GFED_COVER_LABELS[mask_index]} and Different iLCT Types"
+    line_plot_mask(
+        axis=ax_t,
+        output_path=output_path,
+        xlabel_name="Time",
+        ylabel_name=f"Total Burned Area [{unit}]",
+        title_name=f"Total Burned Area for Mask Value {GFED_COVER_LABELS[mask_index]} and Different iLCT Types",
+        output_file_name=f"NATBA_SEASON_{GFED_COVER_LABELS[mask_index]}_1997_2020.png",
+        rotation_type=None,
     )
-    ax_t.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.25),
-        fancybox=True,
-        shadow=True,
-        ncol=5,
-    )
-    ax_t.tick_params(axis="x", rotation=45)
-
-    plt.subplots_adjust(hspace=1.5)
-    file_name = f"NATBA_SEASON_{GFED_COVER_LABELS[mask_index]}_1997_2020.png"
-    file_path = os.path.join(output_path, file_name)
-    plt.grid(True)
-    plt.savefig(file_path, dpi=300, bbox_inches="tight")
-
-    plt.close()
 
 
-def Data_TS_Season_model_gfed_handleGFEDDiagonalCalculation(gfed_diag, data_set):
-    color_iter = iter(DISTINCT_COLORS)
-    for diag_idx, diag_name in enumerate(gfed_diag[1:]):
-        std_error_total = np.zeros(12)
-
-        monthly_burn_total = np.zeros(len(MONTHS_NUM))
-        monthly_burn_count_total = np.zeros(len(MONTHS_NUM))
-        color = next(color_iter)
-        for month in range(len(MONTHS_NUM)):
-            total_burn_area_mask_15 = data_set[diag_name][:]
-            monthly_burn_total[month] = np.mean(total_burn_area_mask_15[month::12])
-            monthly_burn_count_total[month] = np.count_nonzero(
-                total_burn_area_mask_15[month::12]
-            )
-            std_error_total[month] = np.std(
-                total_burn_area_mask_15[month::12]
-            ) / np.sqrt(monthly_burn_count_total[month])
-
-        # ax.plot(MONTHS_NUM, monthly_burn_total, label=f"{diag_name} Burned Area {unit}", color=color)
-        # ax.errorbar(MONTHS_NUM, monthly_burn_total, yerr=std_error_total, fmt='none', capsize=9, color=color,
-        #    elinewidth=1)
-
-
-def Data_TS_Season_model_gfed_handleGFEDDiagonalCalculationGen(
-    dataset, dataset_key_index, mask_index, gfed_diag
+def Data_TS_Season_Regional_handleGFEDPlot(
+    axis, mask_index, output_path, ax_t, time_gf, total_burn_area_total_ilct
 ):
-    color_iter = iter(DISTINCT_COLORS)
-    for diag_idx, diag_name in enumerate(gfed_diag[1:]):
-        std_error_total = np.zeros(12)
-
-        monthly_burn_total = np.zeros(len(MONTHS_NUM))
-        monthly_burn_count_total = np.zeros(len(MONTHS_NUM))
-        color = next(color_iter)
-        for month in range(len(MONTHS_NUM)):
-            total_burn_area_mask = dataset[dataset_key_index][gfed_diag[diag_idx + 1]][
-                :, mask_index
-            ]
-            monthly_burn_total[month] = np.mean(total_burn_area_mask[month::12])
-            monthly_burn_count_total[month] = np.count_nonzero(
-                total_burn_area_mask[month::12]
-            )
-            std_error_total[month] = np.std(total_burn_area_mask[month::12]) / np.sqrt(
-                monthly_burn_count_total[month]
-            )
-    # ax.plot(MONTHS_NUM, monthly_burn_total, label=f"{diag_name} Burned Area {unit}", color=color)
-    # ax.errorbar(MONTHS_NUM, monthly_burn_total, yerr=std_error_total, fmt='none', capsize=9, color=color,
-    #    elinewidth=1)
+    ax_t.plot(
+        time_gf,
+        total_burn_area_total_ilct,
+        label="Total ILCT",
+        color="black",
+        linewidth=1.5,
+    )
+    axis.plot(
+        time_gf,
+        total_burn_area_total_ilct,
+        label="NAT",
+        color="black",
+        linewidth=1.5,
+    )
+    line_plot_mask(
+        axis=ax_t,
+        output_path=output_path,
+        xlabel_name="Time",
+        ylabel_name="Total Burned Area [Mha]",
+        title_name=f"Total Burned Area for Mask Value {GFED_COVER_LABELS[mask_index]} and Different iLCT Types",
+        output_file_name=f"NATBA_TS_gfed{GFED_COVER_LABELS[mask_index]}_1997_2020.png",
+        rotation_type="Regional",
+    )
 
 
 def Data_TS_Season_model_gfed_handleGFEDLandCoverTypesGen(
@@ -602,7 +694,12 @@ def Data_TS_Season_model_gfed_handle_GFED(
             total_burned_across_ilct,
         )
 
-        Data_TS_Season_model_gfed_handleGFEDDiagonalCalculation(gfed_diag, data_set)
+        line_plot_gfed_diagonal_calculation(
+            gfed_diag=gfed_diag,
+            dataset=data_set,
+            dataset_key_index=dataset_key_index,
+            mask_index=mask_index,
+        )
 
     else:
 
@@ -627,117 +724,14 @@ def Data_TS_Season_model_gfed_handle_GFED(
             total_burned_across_ilct,
         )
 
-        # # Plot the total burned area across all ilct types
-        # ax_t.plot(
-        #     MONTHS_NUM,
-        #     total_burned_across_ilct,
-        #     label="Total iLCT",
-        #     color="black",
-        # )
-
-        # # ax_t.errorbar(MONTHS_NUM, total_burned_across_ilct, yerr=total_burned_std_error, fmt='o', capsize=5, color='black', label="Error Bars")
-        # axis.plot(
-        #     MONTHS_NUM,
-        #     total_burned_across_ilct,
-        #     label="GFED5",
-        #     color="black",
-        # )
-        # print("GFED5 error")
-        # print(plot_std)
-        # axis.errorbar(
-        #     MONTHS_NUM,
-        #     total_burned_across_ilct,
-        #     yerr=plot_std,
-        #     fmt="none",
-        #     capsize=9,
-        #     color="black",
-        #     elinewidth=1,
-        # )
-
-        # # ax_t.plot(MONTHS_NUM, monthly_burn_sum, label=f"Total", color='black')
-        # # ax.plot(MONTHS_NUM, monthly_burn_sum, label=f"NAT", color='black')
-
-        # ax_t.set_xlabel("Time")
-        # ax_t.set_ylabel(f"Total Burned Area [{unit}]")
-        # ax_t.set_title(
-        #     f"Total Burned Area for Mask Value {GFED_COVER_LABELS[i]} and Different iLCT Types"
-        # )
-        # ax_t.legend(
-        #     loc="upper center",
-        #     bbox_to_anchor=(0.5, -0.25),
-        #     fancybox=True,
-        #     shadow=True,
-        #     ncol=5,
-        # )
-        # ax_t.tick_params(axis="x", rotation=45)
-
-        # plt.subplots_adjust(hspace=1.5)
-        # file_name = f"NATBA_SEASON_{GFED_COVER_LABELS[i]}_1997_2020.png"
-        # file_path = os.path.join(output_path, file_name)
-        # plt.grid(True)
-        # plt.savefig(file_path, dpi=300, bbox_inches="tight")
-
-        # plt.close()
-        Data_TS_Season_model_gfed_handleGFEDDiagonalCalculationGen(
-            dataset, dataset_key_index, mask_index, gfed_diag
+        line_plot_gfed_diagonal_calculation(
+            dataset=dataset,
+            dataset_key_index=dataset_key_index,
+            mask_index=mask_index,
+            gfed_diag=gfed_diag,
         )
 
     pass
-
-
-def wglc_line_plots(dataset, axis, mask_index, dataset_key_index, monthly=True):
-    print("wglc")
-    color_iter = iter(DISTINCT_COLORS)
-    time_dt = dataset[dataset_key_index]["time"].values
-    time = pd.to_datetime(time_dt)
-
-    wg = dataset["wglc"].data_vars
-    wd_diag = list(wg.keys())
-    if monthly == True:
-        for diag_idx, diag_name in enumerate(wd_diag):
-            std_error_total = np.zeros(12)
-
-            monthly_burn_total = np.zeros(len(MONTHS_NUM))
-            monthly_burn_count_total = np.zeros(len(MONTHS_NUM))
-            color = next(color_iter)
-            for month in range(len(MONTHS_NUM)):
-                total_burn_area_mask = dataset[dataset_key_index][wd_diag[diag_idx]][
-                    :132, mask_index
-                ]
-                monthly_burn_total[month] = np.mean(total_burn_area_mask[month::12])
-                monthly_burn_count_total[month] = np.count_nonzero(
-                    total_burn_area_mask[month::12]
-                )
-                std_error_total[month] = np.std(
-                    total_burn_area_mask[month::12]
-                ) / np.sqrt(monthly_burn_count_total[month])
-
-                axis.plot(
-                    MONTHS_NUM,
-                    monthly_burn_total,
-                    label=f"{dataset_key_index}{diag_name}",
-                    color=color,
-                )
-                axis.errorbar(
-                    MONTHS_NUM,
-                    monthly_burn_total,
-                    yerr=std_error_total,
-                    fmt="none",
-                    capsize=9,
-                    color=color,
-                    elinewidth=1,
-                )
-
-    elif monthly == False:
-        for diag_idx, diag_name in enumerate(wd_diag):
-            color = next(color_iter)
-            axis.plot(
-                time,
-                dataset[dataset_key_index][diag_name][:, mask_index],
-                label="Lightning Density WGLC",
-                color=color,
-                linewidth=1.5,
-            )
 
 
 def Data_TS_Season_model_gfed_handle_else(
@@ -791,47 +785,6 @@ def Data_TS_Season_model_gfed_handle_else(
             color=color,
             elinewidth=1,
         )
-
-
-# xlabel_name = Time or Month
-def line_plot_mask(
-    axis,
-    output_path,
-    xlabel_name,
-    ylabel_name,
-    title_name,
-    output_file_name,
-    rotation_type,
-):
-    axis.set_xlabel(xlabel_name, fontsize=18)
-    axis.set_ylabel(ylabel_name, fontsize=18)
-    axis.set_title(title_name)
-    axis.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.25),
-        fancybox=True,
-        shadow=True,
-        ncol=5,
-    )
-
-    if rotation_type == "Seasonal":
-        plt.xticks(rotation=45, fontsize=18)
-        plt.yticks(fontsize=18)
-        plt.yscale("linear")
-    elif rotation_type == "Regional":
-        axis.xaxis.set_major_locator(mdates.YearLocator())
-        axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    # ax.set_xlim(0.5, 12.5)
-
-    axis.tick_params(axis="x", rotation=45)
-    plt.subplots_adjust(hspace=1.5)
-
-    # NATBA_TS_<region name>_<startyear>_<endyear>
-    file_path = os.path.join(output_path, output_file_name)
-    plt.grid(True)
-    plt.savefig(file_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    print("Complete ", output_file_name)
 
 
 # seasonality
@@ -961,46 +914,6 @@ def Data_TS_Season_Regional_handleGFEDLandCoverGen(
         dataset[dataset_key_index][gfed_diag[0]][:, mask_index, :], axis=-1
     )
     return total_burn_area_total_ilct
-
-
-def Data_TS_Season_Regional_handleGFEDPlot(
-    axis, mask_index, output_path, ax_t, time_gf, total_burn_area_total_ilct
-):
-    ax_t.plot(
-        time_gf,
-        total_burn_area_total_ilct,
-        label="Total ILCT",
-        color="black",
-        linewidth=1.5,
-    )
-    axis.plot(
-        time_gf,
-        total_burn_area_total_ilct,
-        label="NAT",
-        color="black",
-        linewidth=1.5,
-    )
-    ax_t.set_xlabel("Time")
-    ax_t.set_ylabel("Total Burned Area [Mha]")
-    ax_t.set_title(
-        f"Total Burned Area for Mask Value {GFED_COVER_LABELS[mask_index]} and Different iLCT Types"
-    )
-    ax_t.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.25),
-        fancybox=True,
-        shadow=True,
-        ncol=5,
-    )
-    ax_t.xaxis.set_major_locator(mdates.YearLocator())
-    ax_t.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    # plt.xticks(rotation=45)
-    ax_t.tick_params(axis="x", rotation=45)
-    plt.subplots_adjust(hspace=1.5)
-    file_name_t = f"NATBA_TS_gfed{GFED_COVER_LABELS[mask_index]}_1997_2020.png"
-    file_path_t = os.path.join(output_path, file_name_t)
-    plt.savefig(file_path_t, dpi=300, bbox_inches="tight")
-    plt.close()
 
 
 def Data_TS_Season_Regional_handle_GFED(
