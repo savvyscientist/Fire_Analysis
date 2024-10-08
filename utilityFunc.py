@@ -336,6 +336,18 @@ def createDataframe(
     saveDataframe(df.to_string(index=False))
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 # xlabel_name = Time or Month
 def line_plot_mask(
     axis,
@@ -1164,6 +1176,118 @@ def handleLinePlotRun(netcdf_paths, output_path, val, unit):
         )
     else:
         print("Invalid input for 'BA' or 'Lightning' or 'Precip'")
+
+
+
+
+
+
+def percipNudgeFunction(model_path, file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020)):
+    ######################################################
+    #                  NUDGED                            #
+    ######################################################
+
+    # Set the directory where your netCDF files are located
+
+    os.chdir(model_path) #path to model op>
+    # List of months and years to consider
+    years = range(year_range)  # Update this range with the years you want
+    #variables_to_extract = ['fireCount', 'BA_tree', 'BA_shrub', 'BA_grass', 'FLAMM', 'FLAMM_prec', 'f_ignCG', 'f_ignHUMAN']
+
+    # Open each file and load them into separate Datasets
+    datasets = []
+
+    for year in years:
+        for month in MONTHLIST:
+            file_pattern = f'{month}{year}{file_pattern_end}'
+            file_paths = [f for f in os.listdir('.') if f.startswith(file_pattern)]
+            
+            for file_path in file_paths:
+                dataset = xr.open_dataset(file_path)
+                extracted_dataset = dataset.drop_vars([var for var in dataset.variables if var not in variables_to_extract])
+                time_stamp = f'{month}{year}'  # Create a time stamp like 'JAN2013'
+                extracted_dataset = extracted_dataset.expand_dims(time=[time_stamp])  # Add time as a new dimension
+                datasets.append(extracted_dataset)
+
+    # Access and work with individual Datasets
+    for i, dataset in enumerate(datasets):
+        print(f"Dataset {i+1}:")
+        print(dataset)
+        
+    return datasets
+
+
+def perciepApplyMask(datasets, regrid_mask_dataset,variables_list=['FLAMM_prec'], mask_value=(0,True,False)):
+    ##########################################
+    #              APPLY MASK                #
+    ##########################################
+    time_values = []
+    total_dest = np.zeros((len(datasets),len(MASK_LIST)))
+    #conversion_factor = 86400/1000000
+    #conversion_factor = 1/864000*1000000
+    #conversion_factor = 1
+    for t,data in enumerate(datasets):
+            
+        print(data.time)
+        time_values.append(data.coords['time'].values[0])
+
+        for var_idx,i in enumerate(variables_list):
+            
+            total_model_arr = data[i]
+            
+            for mask in MASK_LIST:
+            
+                masked_data_array = np.ma.masked_array(total_model_arr, mask=np.where(regrid_mask_dataset[mask] == mask_value))
+                    
+                print("nonnan count")
+                
+                print(np.count_nonzero(~np.isnan(masked_data_array)))
+                print("nan count")
+                print(np.count_nonzero(np.isnan(masked_data_array)))
+                
+                region_total = masked_data_array
+                total_dest[t,mask] = np.nansum(region_total)
+    
+    xDataArray = xr.DataArray(
+        total_dest,
+        dims=["time", "mask"],
+        coords={
+            "time": time_values,
+            "mask": MASK_LIST,
+        },
+        attrs={'units': 'mm/day'}
+    ) 
+    return xDataArray
+
+def createPrecipNetcdf(regrid_mask_path, model_output=["/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/model_precipitation.nc", "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/nudged_precipitation.nc"]):
+    regrid_mask = xr.open_dataset(regrid_mask_path)
+    regrid_mask = regrid_mask.to_array().values
+    
+    model_datasets = percipNudgeFunction(model_path='/discover/nobackup/kmezuman/E6TpyrEPDnu', file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020))
+    model_x_data_array = perciepApplyMask(datasets=model_datasets, regrid_mask_dataset=regrid_mask,variables_list=['FLAMM_prec'], mask_value=(0,True,False))
+
+    nudge_datasets = percipNudgeFunction(model_path='/discover/nobackup/kmezuman/E6TpyrEPDnu', file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020))
+    nudge_x_data_array = perciepApplyMask(datasets=nudge_datasets, regrid_mask_dataset=regrid_mask,variables_list=['FLAMM_prec'], mask_value=(0,True,False))
+
+    # Create xarray Datasets for model and nudged results
+    model_dataset = xr.Dataset({"FLAMM_prec": model_x_data_array})
+    nudged_dataset = xr.Dataset({"FLAMM_prec": nudge_x_data_array})
+    
+    # Save model and nudged datasets to separate netCDF files
+    dataset_list = [model_dataset, nudged_dataset]
+    percipNetcdfConversion(model_output, dataset_list)
+
+
+def percipNetcdfConversion(model_output, datasets):
+    try:
+        if len(model_output) >= len(datasets):
+            for path, index in enumerate(model_output):  
+                datasets[index].to_netcdf(path)
+    except:
+        print("[-] Unable to preform file conversion on the datasets")
+        
+    
+    
 
 
 def utilityRunner():
