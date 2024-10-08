@@ -1259,6 +1259,7 @@ def perciepApplyMask(datasets, regrid_mask_dataset,variables_list=['FLAMM_prec']
     ) 
     return xDataArray
 
+
 def createPrecipNetcdf(regrid_mask_path, model_output=["/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/model_precipitation.nc", "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/nudged_precipitation.nc"]):
     regrid_mask = xr.open_dataset(regrid_mask_path)
     regrid_mask = regrid_mask.to_array().values
@@ -1275,7 +1276,8 @@ def createPrecipNetcdf(regrid_mask_path, model_output=["/discover/nobackup/proje
     
     # Save model and nudged datasets to separate netCDF files
     dataset_list = [model_dataset, nudged_dataset]
-    percipNetcdfConversion(model_output, dataset_list)
+    if len(model_output) == len(dataset_list):
+        percipNetcdfConversion(model_output, dataset_list)
 
 
 def percipNetcdfConversion(model_output, datasets):
@@ -1286,6 +1288,44 @@ def percipNetcdfConversion(model_output, datasets):
     except:
         print("[-] Unable to preform file conversion on the datasets")
         
+ 
+def gfed_15th_region(dataset_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/gfed_burn_area.nc', variable_name_list=['Total', 'Crop', 'Peat', 'Defo', 'Regional'], mask_list=[ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14], output_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/15th_region.nc'):
+    BA_sorted = xr.open_dataset(dataset_path)
+    dest_dataset = xr.Dataset()
+    time = BA_sorted['time'].values
+    
+    for variable_name in variable_name_list:
+        var_data = BA_sorted[variable_name]
+        total_var_list = np.zeros ((len(time),20)) if variable_name == "Regional" else np.zeros((len(time)))
+        for mask in mask_list:
+            total_var_list += var_data[:, mask,:] if variable_name == "Regional" else var_data[:,mask] 
+
+        # Add total_var_list as a data variable
+        if variable_name == "Regional":
+            land_cover_types = var_data.ilct.values
+            unique_land_cover_types = list(set(land_cover_types))
+            dest_dataset[variable_name] = xr.DataArray(total_var_list, dims=('time', 'ilct'), coords={'time': time,  'ilct': unique_land_cover_types})
+            dest_dataset[variable_name].attrs['units'] = 'km^2'
+        else:
+            dest_dataset[variable_name] = xr.DataArray(total_var_list, dims=('time'), coords={'time': time})
+            dest_dataset[variable_name].attrs['units'] = 'km^2'
+            
+
+    # multiply by 10^-4  km^2 to mha
+    for var_name in dest_dataset.data_vars:
+        var = dest_dataset[var_name]
+    
+        #var_sqha = var * conversion_factor_sqm_to_sqha
+        var_Mha = var * 1e-4
+        dest_dataset[var_name + '_Mha'] = var_Mha
+        dest_dataset[var_name + '_Mha'].attrs['units'] = 'Mha'
+        dest_dataset = dest_dataset.drop_vars(var_name)  # Drop the original variable
+
+    # Save the modified Dataset to a new NetCDF file
+    dest_dataset.to_netcdf(output_path, format='netcdf4')
+
+        # Save the Dataset as a NetCDF file
+    #ds.to_netcdf(output_path, format='netcdf4')
     
     
 
