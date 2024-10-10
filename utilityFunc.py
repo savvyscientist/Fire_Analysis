@@ -1180,8 +1180,6 @@ def handleLinePlotRun(netcdf_paths, output_path, val, unit):
 
 
 
-
-
 def percipNudgeFunction(model_path, file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020)):
     ######################################################
     #                  NUDGED                            #
@@ -1328,6 +1326,95 @@ def gfed_15th_region(dataset_path='/discover/nobackup/projects/giss_ana/users/km
     #ds.to_netcdf(output_path, format='netcdf4')
     
     
+def maps_data_grid_stat(target_data, months_of_interest = [[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]], months_name = [['DJF'], ['MAM'], ['JJA'], ['SON']], variable_name_list=['Total', 'Crop', 'Defo', 'Peat'], save_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_meanBA_1997_2019_nudged.nc'):
+    # Define the months of interest
+    # months_of_interest = [[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]]
+    # months_name = [['DJF'], ['MAM'], ['JJA'], ['SON']]
+
+    # Create an empty xarray dataset to store the monthly means
+    monthly_means_data = xr.Dataset()
+
+    # Loop through each variable
+    for variable in variable_name_list:
+        # Loop through each month set of interest
+        for i, months in enumerate(months_of_interest):
+            # Select the burned area values for the current month set and variable
+            burned_area = target_data[variable].sel(time=target_data['time.month'].isin(months))
+            print(burned_area)
+            # Calculate the mean burned area for each grid cell
+            mean_burned_area = burned_area.mean(dim='time')
+            #<CROP/PEAT/DEFO/NAT/TOTAL>_meanBA_DJF,
+            # Add the mean burned area as a new variable to the monthly_means_data dataset
+            variable_name = f'{variable}_meanBA_{months_name[i][0]}'
+            monthly_means_data[variable_name] = mean_burned_area
+        annual_name = f'{variable}_meanBA_ANN'
+        monthly_means_data[annual_name] = target_data[variable].mean(dim ='time')
+
+    # Add the latitude and longitude coordinates to the monthly_means_data dataset
+    monthly_means_data['lat'] = target_data['lat']
+    monthly_means_data['lon'] = target_data['lon']
+    
+    monthly_means_data.to_netcdf(save_path)
+    
+
+def maps_max_burn_area(target_data, latitude_coords, longitude_coords, array_shape=(720, 1440, 12), month_mean_array_shape = (720, 1440, 2), save_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED5_monthmaxBA_2001_2020.nc', variable_name_list=['Total','Crop','Peat','Defo'], list_label = ['mean', 'month']):
+    print("MAX BURN AREA FOR EACH MONTH")
+
+    # latitude_coords = np.linspace(latitude_shape[0], latitude_shape[1], num=latitude_num)
+
+    # # Create coordinates for the second dimension (1400 points) from -179.9 to 179.9
+    # longitude_coords = np.linspace(longitude_shape[0], longitude_shape[1], num=longitude_num)
+
+    # Use numpy.meshgrid to create 2D coordinate grids for latitude and longitude
+    longitude_grid, latitude_grid = np.meshgrid(longitude_coords, latitude_coords)
+
+    monthly_means_data = xr.Dataset()
+
+    # Assuming you have the 'data' array containing the values for 'total'
+    total = xr.DataArray( coords=[latitude_coords, longitude_coords], dims=['lat', 'lon'])
+    for variable in variable_name_list:
+        my_array = np.zeros(array_shape)
+        mm_array = np.zeros(month_mean_array_shape)
+        data_array = xr.DataArray(my_array, coords=[('latitude', latitude_coords), ('longitude', longitude_coords), ('months',MONTHS_NUM)])
+        month_mean = xr.DataArray(mm_array, coords=[('latitude', latitude_coords), ('longitude', longitude_coords), ('month_mean', list_label) ])
+        variable_data = target_data[variable]
+        for i, month in enumerate(MONTHS_NUM):
+            print(month)
+
+            #get data for months across the years
+            burned_area = variable_data.sel(time=target_data['time.month'].isin(month))
+
+            mean_burned_area = burned_area.mean(dim='time')
+
+
+
+            #store the mean value for each month in each grid cell in the list variable corresponding to the month
+            data_array[:,:,i] = mean_burned_area
+            #print("total")
+
+        print(data_array[393,719])
+        #print( np.argmax(data_array[:,:,:], axis=2, keepdims=True))
+
+        #get indices of maximum mean val for each grid cell
+        #change index to +1
+        #argmax_indices = argmax_indices.reshape(argmax_indices.shape + (1,))
+        argmax_indices = np.expand_dims(np.argmax(data_array[:,:,:], axis=2),2) + 1
+        max_values = np.expand_dims(np.max(data_array[:,:,:], axis=2),2)
+        #max_values = max_values.reshape(max_values.shape + (1,))
+
+    # Assign the results to month_mean
+
+    #separate the list into 2 variables
+        month_mean[:,:,1] = argmax_indices.squeeze()  # Remove the singleton dimension to match month_mean shape
+        month_mean[:,:,0] = max_values.squeeze()
+       # <CROP/PEAT/DEFO/NAT/TOTAL>_monthmaxBA,
+
+        monthly_means_data[f'{variable}_monthmaxBA'] = month_mean
+
+
+    monthly_means_data.to_netcdf(save_path)
+
+
 
 
 def utilityRunner():
@@ -1353,7 +1440,6 @@ def utilityRunner():
                 color_array=script_env_data["color_array"],
                 figure_size=script_env_data["figure_size"],
             )
-
         elif script == "panels":
             script_env_data = env_json[script]
             createPanel(
@@ -1363,7 +1449,6 @@ def utilityRunner():
                 plot_figure_size=script_env_data["plot_figure_size"],
                 output_directory=script_env_data["output_directory"],
             )
-
         elif script == "carbon_budget":
             script_env_data = env_json[script]
             try:
@@ -1393,6 +1478,9 @@ def utilityRunner():
                 val=script_env_data["val"],
                 unit=script_env_data["unit"],
             )
+        elif script == "maps":
+            script_env_data = env_json[script]
+            pass
 
 
 def main():
