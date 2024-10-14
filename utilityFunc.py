@@ -1,6 +1,7 @@
 from os import listdir
 import os
 from os.path import join, isfile
+import warnings
 import numpy as np
 import netCDF4 as nc
 import matplotlib.pyplot as plt
@@ -10,113 +11,31 @@ import pandas as pd
 import json
 import matplotlib.dates as mdates
 import xarray as xr
+from glob import glob
 
-SCRIPTS_ENV_VARIABLES = "fire_analysis_env_variables.json"
-MONTHLIST = [
-    "JAN",
-    "FEB",
-    "MAR",
-    "APR",
-    "MAY",
-    "JUN",
-    "JUL",
-    "AUG",
-    "SEP",
-    "OCT",
-    "NOV",
-    "DEC",
-]
-DISTINCT_COLORS = [
-    "#FF0000",
-    "#00FF00",
-    "#0000FF",
-    "#FFFF00",
-    "#FF00FF",
-    "#00FFFF",
-    "#FFA500",
-    "#008000",
-    "#800080",
-    "#008080",
-    "#800000",
-    "#000080",
-    "#808000",
-    "#800080",
-    "#FF6347",
-    "#00CED1",
-    "#FF4500",
-    "#DA70D6",
-    "#32CD32",
-    "#FF69B4",
-    "#8B008B",
-    "#7FFF00",
-    "#FFD700",
-    "#20B2AA",
-    "#B22222",
-    "#FF7F50",
-    "#00FA9A",
-    "#4B0082",
-    "#ADFF2F",
-    "#F08080",
-]
-
-MASK_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-MONTHS_NUM = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-
-GFED_COVER_LABELS = {
-    0: "Ocean",
-    1: "BONA",
-    2: "TENA",
-    3: "CEAM",
-    4: "NHSA",
-    5: "SHSA",
-    6: "EURO",
-    7: "MIDE",
-    8: "NHAF",
-    9: "SHAF",
-    10: "BOAS",
-    11: "CEAS",
-    12: "SEAS",
-    13: "EQAS",
-    14: "AUST",
-    15: "Total",
-}
-
-
-LAND_COVER_LABELS = {
-    0: "Water",
-    1: "Boreal forest",
-    2: "Tropical forest",
-    3: "Temperate forest",
-    4: "Temperate mosaic",
-    5: "Tropical shrublands",
-    6: "Temperate shrublands",
-    7: "Temperate grasslands",
-    8: "Woody savanna",
-    9: "Open savanna",
-    10: "Tropical grasslands",
-    11: "Wetlands",
-    12: "",
-    13: "Urban",
-    14: "",
-    15: "Snow and Ice",
-    16: "Barren",
-    17: "Sparse boreal forest",
-    18: "Tundra",
-    19: "",
-}
-
-
-NUM_MONTHS = len(MONTHLIST)
-MARKER = "o"
-SECONDS_IN_A_YEAR = 60.0 * 60.0 * 24.0 * 365.0
-KILOGRAMS_TO_GRAMS = 10.0**3
-COLOR_MAP = plt.get_cmap("tab20")
+from utilityGlobal import (
+    SCRIPTS_ENV_VARIABLES,
+    MONTHLIST,
+    DISTINCT_COLORS,
+    MASK_LIST,
+    MONTHS_NUM,
+    GFED_COVER_LABELS,
+    LAND_COVER_LABELS,
+    NUM_MONTHS,
+    MARKER,
+    SECONDS_IN_A_YEAR,
+    KILOGRAMS_TO_GRAMS,
+    COLOR_MAP,
+)
 
 
 def getEnvironmentVariables():
     return json.load(open(SCRIPTS_ENV_VARIABLES, "r"))
 
 
+######################################################
+#                    TIME ANALYSIS                   #
+######################################################
 def plotTimeAnalysis(
     data_set,
     directory_path,
@@ -202,6 +121,42 @@ def executeTimeAnalysis(
     return dest_data
 
 
+def timeAnalysisRunner(
+    file_path,
+    species,
+    sectors,
+    simulations,
+    directory_path,
+    area_variable_name,
+    year_start,
+    year_end,
+    legend_array,
+    color_array,
+    figure_size,
+):
+    data_set = executeTimeAnalysis(
+        file_path,
+        species,
+        sectors,
+        simulations,
+        directory_path,
+        area_variable_name,
+    )
+    plotTimeAnalysis(
+        data_set,
+        directory_path,
+        year_start,
+        year_end,
+        species,
+        legend_array,
+        color_array,
+        figure_size,
+    )
+
+
+######################################################
+#                    PANELS                          #
+######################################################
 def plotPanel(output_directory):
     plt.tight_layout()
     plt.savefig(
@@ -210,7 +165,7 @@ def plotPanel(output_directory):
     plt.close()
 
 
-def createPanel(rows, columns, total_plots, plot_figure_size, output_directory):
+def panelRunner(rows, columns, total_plots, plot_figure_size, output_directory):
     img_paths = []
     fig, axs = plt.subplots(rows, columns, figsize=plot_figure_size)
     for row_index in range(rows):
@@ -233,7 +188,10 @@ def createPanel(rows, columns, total_plots, plot_figure_size, output_directory):
     plotPanel(output_directory)
 
 
-def obtain_carbon_budget_variables(input_files, output_file, df_variable_names) -> None:
+######################################################
+#                    CARBON BUDGET                   #
+######################################################
+def getCarbonBudgetVariables(input_files, output_file, df_variable_names) -> None:
     try:
         dataset_one = nc.Dataset(input_files[0], "r")
         dataset_two = nc.Dataset(input_files[1], "r")
@@ -336,20 +294,30 @@ def createDataframe(
     saveDataframe(df.to_string(index=False))
 
 
+def carbonBudgetRunner(input_files, output_file, df_variable_names):
+    (
+        destination_variable_names,
+        destination_units,
+        destination_CO2,
+        total_carbon,
+    ) = getCarbonBudgetVariables(
+        input_files=input_files,
+        output_file=output_file,
+        pd_variables=df_variable_names,
+    )
+    createDataframe(
+        destination_variable_names,
+        destination_units,
+        destination_CO2,
+        total_carbon,
+    )
 
 
-
-
-
-
-
-
-
-
-
-
+######################################################
+#                    LINE PLOT                       #
+######################################################
 # xlabel_name = Time or Month
-def line_plot_mask(
+def linePlotMask(
     axis,
     output_path,
     xlabel_name,
@@ -389,7 +357,7 @@ def line_plot_mask(
     print("Complete ", output_file_name)
 
 
-def wglc_line_plots(dataset, axis, mask_index, dataset_key_index, monthly=True):
+def wglcLinePlots(dataset, axis, mask_index, dataset_key_index, monthly=True):
     print("wglc")
     color_iter = iter(DISTINCT_COLORS)
     time_dt = dataset[dataset_key_index]["time"].values
@@ -576,7 +544,7 @@ def Data_TS_Season_model_gfed_handleGFEDPlot(
         color="black",
     )
 
-    line_plot_mask(
+    linePlotMask(
         axis=ax_t,
         output_path=output_path,
         xlabel_name="Time",
@@ -604,7 +572,7 @@ def Data_TS_Season_Regional_handleGFEDPlot(
         color="black",
         linewidth=1.5,
     )
-    line_plot_mask(
+    linePlotMask(
         axis=ax_t,
         output_path=output_path,
         xlabel_name="Time",
@@ -823,7 +791,7 @@ def Data_TS_Season_model_gfed(
                     output_path=output_path,
                 )
             elif idx == "wglc":
-                wglc_line_plots(
+                wglcLinePlots(
                     dataset=opened_datasets,
                     mask_index=i,
                     dataset_key_index=idx,
@@ -840,7 +808,7 @@ def Data_TS_Season_model_gfed(
                     dataset_key_index=idx,
                 )
 
-        line_plot_mask(
+        linePlotMask(
             axis=ax,
             output_path=output_path,
             xlabel_name="Month",
@@ -996,12 +964,7 @@ def Data_TS_Season_Regional(
 ):
 
     for i in MASK_LIST:
-        fig, ax = plt.subplots(figsize=figure_shape, tight_layout=True)
-
-        color_map = plt.get_cmap("tab20")
-
-        color_iter = iter(DISTINCT_COLORS)
-
+        _, ax = plt.subplots(figsize=figure_shape, tight_layout=True)
         for idx in opened_datasets.keys():
 
             if idx == "gfed":
@@ -1015,7 +978,7 @@ def Data_TS_Season_Regional(
                 )
 
             elif idx == "wglc":
-                wglc_line_plots(
+                wglcLinePlots(
                     dataset=opened_datasets,
                     axis=ax,
                     mask_index=i,
@@ -1031,7 +994,7 @@ def Data_TS_Season_Regional(
                     mask_index=i,
                     dataset_key_index=idx,
                 )
-    line_plot_mask(
+    linePlotMask(
         axis=ax,
         output_path=output_path,
         xlabel_name="Time",
@@ -1042,7 +1005,7 @@ def Data_TS_Season_Regional(
     )
 
 
-def handleLinePlotRun(netcdf_paths, output_path, val, unit):
+def linePlotsRunner(netcdf_paths, output_path, val, unit):
     if val == "BA":
         opened_datasets = {}
         # obs = input("Observation product: yes or no ")
@@ -1050,7 +1013,6 @@ def handleLinePlotRun(netcdf_paths, output_path, val, unit):
 
         if obs.lower() == "yes":
             unit = "Mha"
-
             print("loading gfed")
             file_path = netcdf_paths["gfed"]
             gfed = xr.open_dataset(file_path)
@@ -1178,159 +1140,16 @@ def handleLinePlotRun(netcdf_paths, output_path, val, unit):
         print("Invalid input for 'BA' or 'Lightning' or 'Precip'")
 
 
-
-
-def percipNudgeFunction(model_path, file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020)):
-    ######################################################
-    #                  NUDGED                            #
-    ######################################################
-
-    # Set the directory where your netCDF files are located
-
-    os.chdir(model_path) #path to model op>
-    # List of months and years to consider
-    years = range(year_range)  # Update this range with the years you want
-    #variables_to_extract = ['fireCount', 'BA_tree', 'BA_shrub', 'BA_grass', 'FLAMM', 'FLAMM_prec', 'f_ignCG', 'f_ignHUMAN']
-
-    # Open each file and load them into separate Datasets
-    datasets = []
-
-    for year in years:
-        for month in MONTHLIST:
-            file_pattern = f'{month}{year}{file_pattern_end}'
-            file_paths = [f for f in os.listdir('.') if f.startswith(file_pattern)]
-            
-            for file_path in file_paths:
-                dataset = xr.open_dataset(file_path)
-                extracted_dataset = dataset.drop_vars([var for var in dataset.variables if var not in variables_to_extract])
-                time_stamp = f'{month}{year}'  # Create a time stamp like 'JAN2013'
-                extracted_dataset = extracted_dataset.expand_dims(time=[time_stamp])  # Add time as a new dimension
-                datasets.append(extracted_dataset)
-
-    # Access and work with individual Datasets
-    for i, dataset in enumerate(datasets):
-        print(f"Dataset {i+1}:")
-        print(dataset)
-        
-    return datasets
-
-
-def perciepApplyMask(datasets, regrid_mask_dataset,variables_list=['FLAMM_prec'], mask_value=(0,True,False)):
-    ##########################################
-    #              APPLY MASK                #
-    ##########################################
-    time_values = []
-    total_dest = np.zeros((len(datasets),len(MASK_LIST)))
-    #conversion_factor = 86400/1000000
-    #conversion_factor = 1/864000*1000000
-    #conversion_factor = 1
-    for t,data in enumerate(datasets):
-            
-        print(data.time)
-        time_values.append(data.coords['time'].values[0])
-
-        for var_idx,i in enumerate(variables_list):
-            
-            total_model_arr = data[i]
-            
-            for mask in MASK_LIST:
-            
-                masked_data_array = np.ma.masked_array(total_model_arr, mask=np.where(regrid_mask_dataset[mask] == mask_value))
-                    
-                print("nonnan count")
-                
-                print(np.count_nonzero(~np.isnan(masked_data_array)))
-                print("nan count")
-                print(np.count_nonzero(np.isnan(masked_data_array)))
-                
-                region_total = masked_data_array
-                total_dest[t,mask] = np.nansum(region_total)
-    
-    xDataArray = xr.DataArray(
-        total_dest,
-        dims=["time", "mask"],
-        coords={
-            "time": time_values,
-            "mask": MASK_LIST,
-        },
-        attrs={'units': 'mm/day'}
-    ) 
-    return xDataArray
-
-
-def createPrecipNetcdf(regrid_mask_path, model_output=["/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/model_precipitation.nc", "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/nudged_precipitation.nc"]):
-    regrid_mask = xr.open_dataset(regrid_mask_path)
-    regrid_mask = regrid_mask.to_array().values
-    
-    model_datasets = percipNudgeFunction(model_path='/discover/nobackup/kmezuman/E6TpyrEPDnu', file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020))
-    model_x_data_array = perciepApplyMask(datasets=model_datasets, regrid_mask_dataset=regrid_mask,variables_list=['FLAMM_prec'], mask_value=(0,True,False))
-
-    nudge_datasets = percipNudgeFunction(model_path='/discover/nobackup/kmezuman/E6TpyrEPDnu', file_pattern_end='.aijE6TpyrEPDnu.nc', variables_to_extract=['FLAMM_prec'], year_range=(1997, 2020))
-    nudge_x_data_array = perciepApplyMask(datasets=nudge_datasets, regrid_mask_dataset=regrid_mask,variables_list=['FLAMM_prec'], mask_value=(0,True,False))
-
-    # Create xarray Datasets for model and nudged results
-    model_dataset = xr.Dataset({"FLAMM_prec": model_x_data_array})
-    nudged_dataset = xr.Dataset({"FLAMM_prec": nudge_x_data_array})
-    
-    # Save model and nudged datasets to separate netCDF files
-    dataset_list = [model_dataset, nudged_dataset]
-    if len(model_output) == len(dataset_list):
-        percipNetcdfConversion(model_output, dataset_list)
-
-
-def percipNetcdfConversion(model_output, datasets):
-    try:
-        if len(model_output) >= len(datasets):
-            for path, index in enumerate(model_output):  
-                datasets[index].to_netcdf(path)
-    except:
-        print("[-] Unable to preform file conversion on the datasets")
-        
- 
-def gfed_15th_region(dataset_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/gfed_burn_area.nc', variable_name_list=['Total', 'Crop', 'Peat', 'Defo', 'Regional'], mask_list=[ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14], output_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/15th_region.nc'):
-    BA_sorted = xr.open_dataset(dataset_path)
-    dest_dataset = xr.Dataset()
-    time = BA_sorted['time'].values
-    
-    for variable_name in variable_name_list:
-        var_data = BA_sorted[variable_name]
-        total_var_list = np.zeros ((len(time),20)) if variable_name == "Regional" else np.zeros((len(time)))
-        for mask in mask_list:
-            total_var_list += var_data[:, mask,:] if variable_name == "Regional" else var_data[:,mask] 
-
-        # Add total_var_list as a data variable
-        if variable_name == "Regional":
-            land_cover_types = var_data.ilct.values
-            unique_land_cover_types = list(set(land_cover_types))
-            dest_dataset[variable_name] = xr.DataArray(total_var_list, dims=('time', 'ilct'), coords={'time': time,  'ilct': unique_land_cover_types})
-            dest_dataset[variable_name].attrs['units'] = 'km^2'
-        else:
-            dest_dataset[variable_name] = xr.DataArray(total_var_list, dims=('time'), coords={'time': time})
-            dest_dataset[variable_name].attrs['units'] = 'km^2'
-            
-
-    # multiply by 10^-4  km^2 to mha
-    for var_name in dest_dataset.data_vars:
-        var = dest_dataset[var_name]
-    
-        #var_sqha = var * conversion_factor_sqm_to_sqha
-        var_Mha = var * 1e-4
-        dest_dataset[var_name + '_Mha'] = var_Mha
-        dest_dataset[var_name + '_Mha'].attrs['units'] = 'Mha'
-        dest_dataset = dest_dataset.drop_vars(var_name)  # Drop the original variable
-
-    # Save the modified Dataset to a new NetCDF file
-    dest_dataset.to_netcdf(output_path, format='netcdf4')
-
-        # Save the Dataset as a NetCDF file
-    #ds.to_netcdf(output_path, format='netcdf4')
-    
-    
-def maps_data_grid_stat(target_data, months_of_interest = [[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]], months_name = [['DJF'], ['MAM'], ['JJA'], ['SON']], variable_name_list=['Total', 'Crop', 'Defo', 'Peat'], save_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_meanBA_1997_2019_nudged.nc'):
-    # Define the months of interest
-    # months_of_interest = [[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]]
-    # months_name = [['DJF'], ['MAM'], ['JJA'], ['SON']]
-
+######################################################
+#                    MAPS                            #
+######################################################
+def maps_data_grid_stat(
+    target_data,
+    months_of_interest=[[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]],
+    months_name=[["DJF"], ["MAM"], ["JJA"], ["SON"]],
+    variable_name_list=["Total", "Crop", "Defo", "Peat"],
+    save_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_meanBA_1997_2019_nudged.nc",
+):
     # Create an empty xarray dataset to store the monthly means
     monthly_means_data = xr.Dataset()
 
@@ -1339,25 +1158,36 @@ def maps_data_grid_stat(target_data, months_of_interest = [[12, 1, 2], [3, 4, 5]
         # Loop through each month set of interest
         for i, months in enumerate(months_of_interest):
             # Select the burned area values for the current month set and variable
-            burned_area = target_data[variable].sel(time=target_data['time.month'].isin(months))
+            burned_area = target_data[variable].sel(
+                time=target_data["time.month"].isin(months)
+            )
             print(burned_area)
             # Calculate the mean burned area for each grid cell
-            mean_burned_area = burned_area.mean(dim='time')
-            #<CROP/PEAT/DEFO/NAT/TOTAL>_meanBA_DJF,
+            mean_burned_area = burned_area.mean(dim="time")
+            # <CROP/PEAT/DEFO/NAT/TOTAL>_meanBA_DJF,
             # Add the mean burned area as a new variable to the monthly_means_data dataset
-            variable_name = f'{variable}_meanBA_{months_name[i][0]}'
+            variable_name = f"{variable}_meanBA_{months_name[i][0]}"
             monthly_means_data[variable_name] = mean_burned_area
-        annual_name = f'{variable}_meanBA_ANN'
-        monthly_means_data[annual_name] = target_data[variable].mean(dim ='time')
+        annual_name = f"{variable}_meanBA_ANN"
+        monthly_means_data[annual_name] = target_data[variable].mean(dim="time")
 
     # Add the latitude and longitude coordinates to the monthly_means_data dataset
-    monthly_means_data['lat'] = target_data['lat']
-    monthly_means_data['lon'] = target_data['lon']
-    
-    monthly_means_data.to_netcdf(save_path)
-    
+    monthly_means_data["lat"] = target_data["lat"]
+    monthly_means_data["lon"] = target_data["lon"]
 
-def maps_max_burn_area(target_data, latitude_coords, longitude_coords, array_shape=(720, 1440, 12), month_mean_array_shape = (720, 1440, 2), save_path='/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED5_monthmaxBA_2001_2020.nc', variable_name_list=['Total','Crop','Peat','Defo'], list_label = ['mean', 'month']):
+    monthly_means_data.to_netcdf(save_path)
+
+
+def maps_max_burn_area(
+    target_data,
+    latitude_coords,
+    longitude_coords,
+    array_shape=(720, 1440, 12),
+    month_mean_array_shape=(720, 1440, 2),
+    save_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED5_monthmaxBA_2001_2020.nc",
+    variable_name_list=["Total", "Crop", "Peat", "Defo"],
+    list_label=["mean", "month"],
+):
     print("MAX BURN AREA FOR EACH MONTH")
 
     # latitude_coords = np.linspace(latitude_shape[0], latitude_shape[1], num=latitude_num)
@@ -1371,122 +1201,412 @@ def maps_max_burn_area(target_data, latitude_coords, longitude_coords, array_sha
     monthly_means_data = xr.Dataset()
 
     # Assuming you have the 'data' array containing the values for 'total'
-    total = xr.DataArray( coords=[latitude_coords, longitude_coords], dims=['lat', 'lon'])
+    total = xr.DataArray(
+        coords=[latitude_coords, longitude_coords], dims=["lat", "lon"]
+    )
     for variable in variable_name_list:
         my_array = np.zeros(array_shape)
         mm_array = np.zeros(month_mean_array_shape)
-        data_array = xr.DataArray(my_array, coords=[('latitude', latitude_coords), ('longitude', longitude_coords), ('months',MONTHS_NUM)])
-        month_mean = xr.DataArray(mm_array, coords=[('latitude', latitude_coords), ('longitude', longitude_coords), ('month_mean', list_label) ])
+        data_array = xr.DataArray(
+            my_array,
+            coords=[
+                ("latitude", latitude_coords),
+                ("longitude", longitude_coords),
+                ("months", MONTHS_NUM),
+            ],
+        )
+        month_mean = xr.DataArray(
+            mm_array,
+            coords=[
+                ("latitude", latitude_coords),
+                ("longitude", longitude_coords),
+                ("month_mean", list_label),
+            ],
+        )
         variable_data = target_data[variable]
         for i, month in enumerate(MONTHS_NUM):
             print(month)
 
-            #get data for months across the years
-            burned_area = variable_data.sel(time=target_data['time.month'].isin(month))
+            # get data for months across the years
+            burned_area = variable_data.sel(time=target_data["time.month"].isin(month))
 
-            mean_burned_area = burned_area.mean(dim='time')
+            mean_burned_area = burned_area.mean(dim="time")
 
+            # store the mean value for each month in each grid cell in the list variable corresponding to the month
+            data_array[:, :, i] = mean_burned_area
+            # print("total")
 
+        print(data_array[393, 719])
+        # print( np.argmax(data_array[:,:,:], axis=2, keepdims=True))
 
-            #store the mean value for each month in each grid cell in the list variable corresponding to the month
-            data_array[:,:,i] = mean_burned_area
-            #print("total")
+        # get indices of maximum mean val for each grid cell
+        # change index to +1
+        # argmax_indices = argmax_indices.reshape(argmax_indices.shape + (1,))
+        argmax_indices = np.expand_dims(np.argmax(data_array[:, :, :], axis=2), 2) + 1
+        max_values = np.expand_dims(np.max(data_array[:, :, :], axis=2), 2)
+        # max_values = max_values.reshape(max_values.shape + (1,))
 
-        print(data_array[393,719])
-        #print( np.argmax(data_array[:,:,:], axis=2, keepdims=True))
+        # Assign the results to month_mean
 
-        #get indices of maximum mean val for each grid cell
-        #change index to +1
-        #argmax_indices = argmax_indices.reshape(argmax_indices.shape + (1,))
-        argmax_indices = np.expand_dims(np.argmax(data_array[:,:,:], axis=2),2) + 1
-        max_values = np.expand_dims(np.max(data_array[:,:,:], axis=2),2)
-        #max_values = max_values.reshape(max_values.shape + (1,))
+        # separate the list into 2 variables
+        month_mean[:, :, 1] = (
+            argmax_indices.squeeze()
+        )  # Remove the singleton dimension to match month_mean shape
+        month_mean[:, :, 0] = max_values.squeeze()
+        # <CROP/PEAT/DEFO/NAT/TOTAL>_monthmaxBA,
 
-    # Assign the results to month_mean
-
-    #separate the list into 2 variables
-        month_mean[:,:,1] = argmax_indices.squeeze()  # Remove the singleton dimension to match month_mean shape
-        month_mean[:,:,0] = max_values.squeeze()
-       # <CROP/PEAT/DEFO/NAT/TOTAL>_monthmaxBA,
-
-        monthly_means_data[f'{variable}_monthmaxBA'] = month_mean
-
+        monthly_means_data[f"{variable}_monthmaxBA"] = month_mean
 
     monthly_means_data.to_netcdf(save_path)
 
 
+def mapCombineDataset(
+    comb_dir_path="/discover/nobackup/kmezuman/E6TpyrEPDnu",
+    file_pattern_extension=".aijE6TpyrEPDnu.nc",
+    variables_to_extract=["BA_tree", "BA_shrub", "BA_grass"],
+    output_path="/discover/nobackup/projects/giss_ana/users/kmezuamn/GFED5/combined_monthly_data.nc",
+):
+    warnings.filterwarnings("ignore")
 
+    os.chdir(comb_dir_path)
 
-def utilityRunner():
-    env_json = getEnvironmentVariables()
-    for script in env_json["selected_script"]:
-        if script == "time_analysis":
-            script_env_data = env_json[script]
-            data_set = executeTimeAnalysis(
-                file_path=script_env_data["input_file_path"],
-                species=script_env_data["species"],
-                sectors=script_env_data["sectors"],
-                simulations=script_env_data["simulations"],
-                directory_path=script_env_data["input_directory_path"],
-                area_variable_name=script_env_data["area_variable_name"],
-            )
-            plotTimeAnalysis(
-                data_set,
-                directory_path=script_env_data["directory_path"],
-                year_start=script_env_data["year_start"],
-                year_end=script_env_data["year_end"],
-                species=script_env_data["species"],
-                legend_array=script_env_data["legend_array"],
-                color_array=script_env_data["color_array"],
-                figure_size=script_env_data["figure_size"],
-            )
-        elif script == "panels":
-            script_env_data = env_json[script]
-            createPanel(
-                rows=script_env_data["rows"],
-                columns=script_env_data["columns"],
-                total_plots=script_env_data["total_plots"],
-                plot_figure_size=script_env_data["plot_figure_size"],
-                output_directory=script_env_data["output_directory"],
-            )
-        elif script == "carbon_budget":
-            script_env_data = env_json[script]
-            try:
-                (
-                    destination_variable_names,
-                    destination_units,
-                    destination_CO2,
-                    total_carbon,
-                ) = obtain_carbon_budget_variables(
-                    input_files=env_json["input_files"],
-                    output_file=env_json["output_file"],
-                    pd_variables=env_json["df_variable_names"],
+    # Specify the path to store the PNG files
+    fnms = []
+
+    # # Open the files using xr.open_mfdataset()
+    # target_data = xr.open_mfdataset(fnms)
+
+    years = range(1997, 2020)
+    # Open each file and load them into separate Datasets
+    datasets = []
+
+    for year in years:
+        for month in MONTHLIST:
+            file_pattern = f"{month}{year}{file_pattern_extension}"
+            file_paths = [f for f in os.listdir(".") if f.startswith(file_pattern)]
+
+            for file_path in file_paths:
+                dataset = xr.open_dataset(file_path)
+                extracted_dataset = dataset.drop_vars(
+                    [
+                        var
+                        for var in dataset.variables
+                        if var not in variables_to_extract
+                    ]
                 )
-                createDataframe(
-                    destination_variable_names,
-                    destination_units,
-                    destination_CO2,
-                    total_carbon,
+                time_stamp = f"{month}{year}"  # Create a time stamp like 'JAN2013'
+                extracted_dataset = extracted_dataset.expand_dims(
+                    time=[time_stamp]
+                )  # Add time as a new dimension
+                datasets.append(extracted_dataset)
+
+    # Combine all extracted datasets into a single dataset along the time dimension
+    combined_dataset = xr.concat(datasets, dim="time")
+
+    # Save the combined dataset to a NetCDF file
+    combined_dataset.to_netcdf(output_path)
+
+    # Close the datasets
+    for dataset in datasets:
+        dataset.close()
+        # maps_max_burn_area(target_data=target_data,)
+
+
+def getTargetData(file_path):
+    target_data = xr.open_dataset(file_path, engine="netcdf4")
+    target_data["BA"] = (
+        target_data["BA_shrub"] + target_data["BA_tree"] + target_data["BA_grass"]
+    )
+    time_coords_str = target_data["time"].values
+    time_coords = pd.to_datetime(
+        time_coords_str, format="%b%Y"
+    )  # Assuming 'JAN1997' format
+    # Update 'time' coordinate in the target_data dataset
+    target_data = target_data.assign_coords(time=time_coords)
+    return target_data
+
+
+def getMultiYearTarget(dir_path):
+    fnms = []
+    for year in range(2001, 2021):
+        pattern = f"BA{year}??.nc"
+        file_paths = glob(os.path.join(dir_path, pattern))
+        fnms.extend(file_paths)
+
+    # Open the files using xr.open_mfdataset()
+    target_data = xr.open_mfdataset(fnms)
+    return target_data
+
+
+def mapRunner(
+    target_data_list,
+    fnms_input_folder_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA",
+    maps_data_grid_stat_fnms_save_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_meanBA_1997_2019_nudged.nc",
+    maps_max_burn_area_fnms_save_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED5_monthmaxBA_2001_2020.nc",
+    target_data_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/combined_monthly_data.nc",
+):
+    target_data = getMultiYearTarget(fnms_input_folder_path)
+
+    maps_data_grid_stat(
+        target_data=target_data,
+        months_of_interest=[[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]],
+        months_name=[["DJF"], ["MAM"], ["JJA"], ["SON"]],
+        variable_name_list=["Total", "Crop", "Defo", "Peat"],
+        save_path=maps_data_grid_stat_fnms_save_path,
+    )
+    maps_max_burn_area(
+        target_data,
+        latitude_coords=(np.linspace(-89.88, 89.88, num=720)),
+        longitude_coords=(np.linspace(-179.9, 179.9, num=1440)),
+        array_shape=(720, 1440, 12),
+        month_mean_array_shape=(720, 1440, 2),
+        save_path=maps_max_burn_area_fnms_save_path,
+        variable_name_list=["Total", "Crop", "Peat", "Defo"],
+        list_label=["mean", "month"],
+    )
+
+    for target_env_value in target_data_list:
+        mapCombineDataset(
+            comb_dir_path=target_env_value["comb_dir_path"],
+            file_pattern_extension=target_env_value["file_pattern_extension"],
+            variables_to_extract=target_env_value["variables_to_extract"],
+            output_path=target_env_value["output_path"],
+        )
+
+        # Update 'time' coordinate in the target_data dataset
+        target_data = getTargetData(file_path=target_data_path)
+        maps_data_grid_stat(
+            target_data=target_data,
+            months_of_interest=target_env_value["months_of_interest"],
+            months_name=target_env_value["months_name"],
+            variable_name_list=target_env_value["variable_name_list"],
+            save_path=target_env_value["maps_data_grid_stat_save_path"],
+        )
+        maps_max_burn_area(
+            target_data=target_data,
+            latitude_coords=(
+                np.linspace(-89.88, 89.88, num=target_env_value["array_shape"][0])
+            ),
+            longitude_coords=(
+                np.linspace(-179.9, 179.9, num=target_env_value["array_shape"][1])
+            ),
+            array_shape=target_env_value["array_shape"],
+            month_mean_array_shape=target_env_value["month_mean_array_shape"],
+            save_path=target_env_value["maps_max_burn_area_save_path"],
+            variable_name_list=target_env_value["variable_name_list"],
+            list_label=target_env_value["list_label"],
+        )
+
+
+######################################################
+#                    PERCIP                          #
+######################################################
+def percipNudgeFunction(
+    model_path,
+    file_pattern_end=".aijE6TpyrEPDnu.nc",
+    variables_to_extract=["FLAMM_prec"],
+    year_range=(1997, 2020),
+):
+    ######################################################
+    #                  NUDGED                            #
+    ######################################################
+
+    # Set the directory where your netCDF files are located
+
+    os.chdir(model_path)  # path to model op>
+    # List of months and years to consider
+    years = range(year_range)  # Update this range with the years you want
+    # variables_to_extract = ['fireCount', 'BA_tree', 'BA_shrub', 'BA_grass', 'FLAMM', 'FLAMM_prec', 'f_ignCG', 'f_ignHUMAN']
+
+    # Open each file and load them into separate Datasets
+    datasets = []
+
+    for year in years:
+        for month in MONTHLIST:
+            file_pattern = f"{month}{year}{file_pattern_end}"
+            file_paths = [f for f in os.listdir(".") if f.startswith(file_pattern)]
+
+            for file_path in file_paths:
+                dataset = xr.open_dataset(file_path)
+                extracted_dataset = dataset.drop_vars(
+                    [
+                        var
+                        for var in dataset.variables
+                        if var not in variables_to_extract
+                    ]
                 )
-            except:
-                print("[-] Failed to run script")
-        elif script == "line_plots":
-            script_env_data = env_json[script]
-            handleLinePlotRun(
-                netcdf_paths=script_env_data["netcdf_paths"],
-                output_path=script_env_data["output_path"],
-                val=script_env_data["val"],
-                unit=script_env_data["unit"],
+                time_stamp = f"{month}{year}"  # Create a time stamp like 'JAN2013'
+                extracted_dataset = extracted_dataset.expand_dims(
+                    time=[time_stamp]
+                )  # Add time as a new dimension
+                datasets.append(extracted_dataset)
+
+    # Access and work with individual Datasets
+    for i, dataset in enumerate(datasets):
+        print(f"Dataset {i+1}:")
+        print(dataset)
+
+    return datasets
+
+
+def perciepApplyMask(
+    datasets,
+    regrid_mask_dataset,
+    variables_list=["FLAMM_prec"],
+    mask_value=(0, True, False),
+):
+    ##########################################
+    #              APPLY MASK                #
+    ##########################################
+    time_values = []
+    total_dest = np.zeros((len(datasets), len(MASK_LIST)))
+    # conversion_factor = 86400/1000000
+    # conversion_factor = 1/864000*1000000
+    # conversion_factor = 1
+    for t, data in enumerate(datasets):
+
+        print(data.time)
+        time_values.append(data.coords["time"].values[0])
+
+        for var_idx, i in enumerate(variables_list):
+
+            total_model_arr = data[i]
+
+            for mask in MASK_LIST:
+
+                masked_data_array = np.ma.masked_array(
+                    total_model_arr,
+                    mask=np.where(regrid_mask_dataset[mask] == mask_value),
+                )
+
+                print("nonnan count")
+
+                print(np.count_nonzero(~np.isnan(masked_data_array)))
+                print("nan count")
+                print(np.count_nonzero(np.isnan(masked_data_array)))
+
+                region_total = masked_data_array
+                total_dest[t, mask] = np.nansum(region_total)
+
+    xDataArray = xr.DataArray(
+        total_dest,
+        dims=["time", "mask"],
+        coords={
+            "time": time_values,
+            "mask": MASK_LIST,
+        },
+        attrs={"units": "mm/day"},
+    )
+    return xDataArray
+
+
+def createPrecipNetcdf(
+    regrid_mask_path,
+    model_output=[
+        "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/model_precipitation.nc",
+        "/discover/nobackup/projects/giss_ana/users/kmezuman/Precip/nudged_precipitation.nc",
+    ],
+):
+    regrid_mask = xr.open_dataset(regrid_mask_path)
+    regrid_mask = regrid_mask.to_array().values
+
+    model_datasets = percipNudgeFunction(
+        model_path="/discover/nobackup/kmezuman/E6TpyrEPDnu",
+        file_pattern_end=".aijE6TpyrEPDnu.nc",
+        variables_to_extract=["FLAMM_prec"],
+        year_range=(1997, 2020),
+    )
+    model_x_data_array = perciepApplyMask(
+        datasets=model_datasets,
+        regrid_mask_dataset=regrid_mask,
+        variables_list=["FLAMM_prec"],
+        mask_value=(0, True, False),
+    )
+
+    nudge_datasets = percipNudgeFunction(
+        model_path="/discover/nobackup/kmezuman/E6TpyrEPDnu",
+        file_pattern_end=".aijE6TpyrEPDnu.nc",
+        variables_to_extract=["FLAMM_prec"],
+        year_range=(1997, 2020),
+    )
+    nudge_x_data_array = perciepApplyMask(
+        datasets=nudge_datasets,
+        regrid_mask_dataset=regrid_mask,
+        variables_list=["FLAMM_prec"],
+        mask_value=(0, True, False),
+    )
+
+    # Create xarray Datasets for model and nudged results
+    model_dataset = xr.Dataset({"FLAMM_prec": model_x_data_array})
+    nudged_dataset = xr.Dataset({"FLAMM_prec": nudge_x_data_array})
+
+    # Save model and nudged datasets to separate netCDF files
+    dataset_list = [model_dataset, nudged_dataset]
+    if len(model_output) == len(dataset_list):
+        percipNetcdfConversion(model_output, dataset_list)
+
+
+def percipNetcdfConversion(model_output, datasets):
+    try:
+        if len(model_output) >= len(datasets):
+            for path, index in enumerate(model_output):
+                datasets[index].to_netcdf(path)
+    except:
+        print("[-] Unable to preform file conversion on the datasets")
+
+
+def gfed_15th_region(
+    dataset_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/gfed_burn_area.nc",
+    variable_name_list=["Total", "Crop", "Peat", "Defo", "Regional"],
+    mask_list=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    output_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/15th_region.nc",
+):
+    BA_sorted = xr.open_dataset(dataset_path)
+    dest_dataset = xr.Dataset()
+    time = BA_sorted["time"].values
+
+    for variable_name in variable_name_list:
+        var_data = BA_sorted[variable_name]
+        total_var_list = (
+            np.zeros((len(time), 20))
+            if variable_name == "Regional"
+            else np.zeros((len(time)))
+        )
+        for mask in mask_list:
+            total_var_list += (
+                var_data[:, mask, :]
+                if variable_name == "Regional"
+                else var_data[:, mask]
             )
-        elif script == "maps":
-            script_env_data = env_json[script]
-            pass
 
+        # Add total_var_list as a data variable
+        if variable_name == "Regional":
+            land_cover_types = var_data.ilct.values
+            unique_land_cover_types = list(set(land_cover_types))
+            dest_dataset[variable_name] = xr.DataArray(
+                total_var_list,
+                dims=("time", "ilct"),
+                coords={"time": time, "ilct": unique_land_cover_types},
+            )
+            dest_dataset[variable_name].attrs["units"] = "km^2"
+        else:
+            dest_dataset[variable_name] = xr.DataArray(
+                total_var_list, dims=("time"), coords={"time": time}
+            )
+            dest_dataset[variable_name].attrs["units"] = "km^2"
 
-def main():
-    utilityRunner()
-    pass
+    # multiply by 10^-4  km^2 to mha
+    for var_name in dest_dataset.data_vars:
+        var = dest_dataset[var_name]
 
+        # var_sqha = var * conversion_factor_sqm_to_sqha
+        var_Mha = var * 1e-4
+        dest_dataset[var_name + "_Mha"] = var_Mha
+        dest_dataset[var_name + "_Mha"].attrs["units"] = "Mha"
+        dest_dataset = dest_dataset.drop_vars(var_name)  # Drop the original variable
 
-if __name__ == "__main__":
-    main()
+    # Save the modified Dataset to a new NetCDF file
+    dest_dataset.to_netcdf(output_path, format="netcdf4")
+
+    # Save the Dataset as a NetCDF file
+    # ds.to_netcdf(output_path, format='netcdf4')

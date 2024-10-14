@@ -1,5 +1,5 @@
 {
-  "selected_script": ["time_analysis", "carbon_budget"],
+  "selected_script": ["time_analysis"],
   "time_analysis": {
     "year_start": 1996,
     "year_end": 1996,
@@ -57,5 +57,53 @@
     "val": "BA",
     "unit": "",
     "output_path": "/discover/nobackup/kmezuman/plots/fire_repository/Hackathon/"
+  },
+  "maps": {
+    "fnms_input_folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA",
+    "maps_data_grid_stat_fnms_save_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_meanBA_1997_2019_nudged.nc",
+    "maps_max_burn_area_fnms_save_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED5_monthmaxBA_2001_2020.nc",
+    "target_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/combined_monthly_data.nc",
+    "target_data_list": [
+      {
+        "comb_dir_path": "/discover/nobackup/kmezuman/E6TpyrEPDnu",
+        "file_pattern_extension": ".aijE6TpyrEPDnu.nc",
+        "variables_to_extract": ["BA_tree", "BA_shrub", "BA_grass"],
+        "output_path": "/discover/nobackup/projects/giss_ana/users/kmezuamn/GFED5/combined_monthly_data.nc",
+
+        "maps_data_grid_stat_save_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_meanBA_1997_2019_nudged.nc",
+        "maps_max_burn_area_save_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_monthmaxBA_2001_2019_nudged.nc",
+        "array_shape": [90, 144, 12],
+        "month_mean_array_shape": [90, 144, 2],
+        "variable_name_list": ["BA", "BA_shrub", "BA_grass", "BA_tree"],
+        "list_label": ["mean", "month"],
+        "months_of_interest": [
+          [12, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8],
+          [9, 10, 11]
+        ],
+        "months_name": [["DJF"], ["MAM"], ["JJA"], ["SON"]]
+      },
+      {
+        "comb_dir_path": "/discover/nobackup/kmezuman/E6TpyrEPD",
+        "file_pattern_extension": ".aijE6TpyrEPD.nc",
+        "variables_to_extract": [],
+        "output_path": "/discover/nobackup/projects/giss_ana/users/kmezuamn/GFED5/combined_monthly_data.nc",
+
+        "maps_data_grid_stat_save_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/combined_monthly_data.nc",
+        "maps_max_burn_area_save_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/Model_monthmaxBA_2001_2019.nc",
+        "array_shape": [90, 144, 12],
+        "month_mean_array_shape": [90, 144, 2],
+        "variable_name_list": ["BA", "BA_shrub", "BA_grass", "BA_tree"],
+        "list_label": ["mean", "month"],
+        "months_of_interest": [
+          [12, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8],
+          [9, 10, 11]
+        ],
+        "months_name": [["DJF"], ["MAM"], ["JJA"], ["SON"]]
+      }
+    ]
   }
 }
