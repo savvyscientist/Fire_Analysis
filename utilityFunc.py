@@ -1399,7 +1399,7 @@ def mapRunner(
 
 
 ######################################################
-#                    PERCIP                          #
+#             /data2netcdf/PERCIP                    #
 ######################################################
 def percipNudgeFunction(
     model_path,
@@ -1555,6 +1555,9 @@ def percipNetcdfConversion(model_output, datasets):
         print("[-] Unable to preform file conversion on the datasets")
 
 
+######################################################
+#            /data2netcdf/gfed_15th_region           #
+######################################################
 def gfed_15th_region(
     dataset_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/gfed_burn_area.nc",
     variable_name_list=["Total", "Crop", "Peat", "Defo", "Regional"],
