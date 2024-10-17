@@ -26,6 +26,7 @@ from utilityGlobal import (
     SECONDS_IN_A_YEAR,
     KILOGRAMS_TO_GRAMS,
     COLOR_MAP,
+    SQM_TO_SQHA,
 )
 
 
@@ -1558,7 +1559,7 @@ def percipNetcdfConversion(model_output, datasets):
 ######################################################
 #            /data2netcdf/gfed_15th_region           #
 ######################################################
-def gfed_15th_region(
+def gfed15thRegion(
     dataset_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/gfed_burn_area.nc",
     variable_name_list=["Total", "Crop", "Peat", "Defo", "Regional"],
     mask_list=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
@@ -1613,3 +1614,30 @@ def gfed_15th_region(
 
     # Save the Dataset as a NetCDF file
     # ds.to_netcdf(output_path, format='netcdf4')
+
+
+######################################################
+#            /data2netcdf/gfed_mha_conv           #
+######################################################
+def gfedMhaConvRunner(
+    file_path="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/gfed_burn_area.nc",
+    output_file="/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/GFED_Mha.nc",
+    units="Mha",
+    var_name_extension="_Mha",
+):
+    warnings.filterwarnings("ignore")
+    BA = xr.open_dataset(file_path)
+    # BA_sorted = BA.sortby("time")
+    ds = BA.sortby("time")
+    for var_name in ds.data_vars:
+        var = ds[var_name]
+
+        # var_sqha = var * conversion_factor_sqm_to_sqha
+        var_Mha = var * SQM_TO_SQHA
+        ds[var_name + var_name_extension] = var_Mha
+        ds[var_name + var_name_extension].attrs["units"] = units
+        ds = ds.drop_vars(var_name)  # Drop the original variable
+
+        # Save the modified Dataset to a new NetCDF file
+
+        ds.to_netcdf(output_file, format="netcdf4")
