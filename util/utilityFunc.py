@@ -18,7 +18,6 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-
 from utilityGlobal import (
     SCRIPTS_ENV_VARIABLES,
     MONTHLIST,
@@ -33,6 +32,9 @@ from utilityGlobal import (
     KILOGRAMS_TO_GRAMS,
     COLOR_MAP,
     SQM_TO_SQHA,
+    KM_NEG_2TOM_NEG_2,
+    DAYS_TO_SECONDS,
+    EARTH_RADIUS,
 )
 
 
@@ -184,6 +186,7 @@ def timeAnalysisRunner(
 
 
 def time_series_plot(
+    axis,
     data,
     marker,
     line_style,
@@ -192,7 +195,6 @@ def time_series_plot(
     title,
     x_label,
     y_label,
-    figure_size=(10, 6),
     grid_visible=True,
 ):
     """
@@ -203,25 +205,27 @@ def time_series_plot(
     modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the sum of burned area for that year.
     """
 
-    # Extract years and total burned area for both GFED and ModelE
-    years_data = data[:, 0]
-    total_data = data[:, 1]
+    try:
+        # Extract years and total burned area for both GFED and ModelE
+        years_data = data[:, 0]
+        total_data = data[:, 1]
 
-    # Plot the time series of total burned area for both GFED and ModelE
-    plt.figure(figsize=figure_size)
-    plt.plot(
-        years_data,
-        total_data,
-        marker=marker,
-        linestyle=line_style,
-        color=color,
-        label=label,
-    )
-    plt.title(title)
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.legend()
-    plt.grid(grid_visible)
+        # Plot the time series of total burned area for both GFED and ModelE
+        axis.plot(
+            years_data,
+            total_data,
+            marker=marker,
+            linestyle=line_style,
+            color=color,
+            label=label,
+        )
+        axis.title(title)
+        axis.xlabel(x_label)
+        axis.ylabel(y_label)
+        axis.legend()
+        axis.grid(grid_visible)
+    except:
+        print("title, xlabel...etc already set")
 
 
 def obtain_netcdf_files(dir_path) -> list:
@@ -237,6 +241,44 @@ def obtain_netcdf_files(dir_path) -> list:
         if isfile(join(dir_path, file))
         and (file.split(".")[-1] == "hdf5" or file.split(".")[-1] == "nc")
     ]
+
+
+def calculate_grid_area(grid_area_shape):
+    # Grid resolution
+    nlat = grid_area_shape[0]  # Number of latitude bands
+    nlon = grid_area_shape[1]  # Number of longitude bands
+
+    # Latitude and longitude step size (degrees)
+    lat_step = 180 / nlat
+    lon_step = 360 / nlon
+
+    # Convert step size to radians
+    lat_step_rad = np.deg2rad(lat_step)
+    lon_step_rad = np.deg2rad(lon_step)
+
+    # Initialize grid cell area matrix
+    grid_area = np.zeros((nlat, nlon))
+
+    # Loop over each latitude band
+    for i in range(nlat):
+        # Latitude at the center of the grid cell
+        lat = -90 + (i + 0.25) * lat_step
+
+        # Convert latitude to radians
+        lat_rad = np.deg2rad(lat)
+
+        # Calculate the surface area of the grid cell at this latitude
+        area = (
+            (EARTH_RADIUS**2)
+            * lon_step_rad
+            * (np.sin(lat_rad + lat_step_rad / 2) - np.sin(lat_rad - lat_step_rad / 2))
+        )
+
+        # Assign the area to all longitude cells for this latitude band
+        grid_area[i, :] = area
+
+    # Display the grid area matrix
+    return grid_area
 
 
 def read_gfed4s(files):
@@ -330,6 +372,59 @@ def read_ModelEBA(files):
     return modelE_BA_all_year, modelE_lons, modelE_lats
 
 
+def read_lightning_data(files):
+    """
+    Reads multiple lightning files using h5py, calculates the annual burned area,
+    and returns the data as xarray.DataArray.
+    """
+    for file in files:
+        with nc.Dataset(file) as netcdf_dataset:
+            # dataset containing all xarray data array (used to create the final netcdf file)
+            dataset_dict = {}
+            attribute_dict = {}
+            updated_var_data_array = []
+
+            # update the units to match the upscaling process
+            attribute_dict["units"] = "m^2"
+
+            density_variable = netcdf_dataset.variables["density"]
+            time_data_array = netcdf_dataset.variables["time"][:]
+            grid_cell_area = calculate_grid_area(
+                grid_area_shape=(density_variable.shape[-2], density_variable.shape[-1])
+            )
+
+            # Copy attributes of the burned area fraction
+            for attr_name in density_variable.ncattrs():
+                attribute_dict[attr_name] = getattr(density_variable, attr_name)
+
+            for month in range(len(density_variable[:])):
+                var_data_array = (
+                    (density_variable[:][month] * grid_cell_area)
+                    * KM_NEG_2TOM_NEG_2
+                    / DAYS_TO_SECONDS
+                )
+
+                print(f"density_month_{(month + 1)}")
+                updated_var_data_array.append(var_data_array)
+
+            latitudes = np.linspace(-90, 90, density_variable.shape[-2])
+            longitudes = np.linspace(-180, 180, density_variable.shape[-1])
+
+            # creates the data array and saves it to a file
+            var_data_array_xarray = xr.DataArray(
+                (updated_var_data_array),
+                coords={
+                    "time": time_data_array,
+                    "latitude": latitudes,
+                    "longitude": longitudes,
+                },
+                dims=["time", "latitude", "longitude"],
+                attrs=attribute_dict,
+            )
+
+            return var_data_array_xarray, longitudes, latitudes
+
+
 def define_subplot(
     fig,
     ax,
@@ -415,7 +510,9 @@ def define_subplot(
     return ax
 
 
-def map_plot(decade_mean_data, longitude, latitude, subplot_title):
+def map_plot(
+    figure, axis, axis_index, decade_mean_data, longitude, latitude, subplot_title
+):
     """
     Plots the decadal mean burned area of both GFED and ModelE side by side.
 
@@ -424,15 +521,10 @@ def map_plot(decade_mean_data, longitude, latitude, subplot_title):
     decade_mean_modelEba (xarray.DataArray): The decadal mean burned area from ModelE(lat, lon array).
     """
 
-    # Plot side by side maps for GFED and ModelE
-    fig, ax = plt.subplots(
-        3, 1, figsize=(18, 10), subplot_kw={"projection": ccrs.PlateCarree()}
-    )
-
     # GFED4s decadal mean map
     define_subplot(
-        fig,
-        ax[0],
+        figure,
+        axis[axis_index],
         decade_mean_data,
         longitude,
         latitude,
@@ -445,9 +537,8 @@ def map_plot(decade_mean_data, longitude, latitude, subplot_title):
         title=subplot_title,
         clabel="BA [$m^2$]",
         masx=0.7 * decade_mean_data.max(),
+        is_diff=True,
     )
-
-    plt.show()
 
 
 def obtain_time_series_xarray(
@@ -483,8 +574,11 @@ def obtain_time_series_xarray(
             total_burned_area_all_years, longitude, latitude = read_ModelEBA(file_paths)
         case "BA":
             total_burned_area_all_years, longitude, latitude = read_gfed4s(file_paths)
+        case "lightning":
+            total_burned_area_all_years, longitude, latitude = read_lightning_data(
+                file_paths
+            )
 
-    print(NetCDF_Type)
     # Calculate the mean burned area over the decade
     time_mean_data = total_burned_area_all_years.mean(dim=time_dimension_name)
 
@@ -503,8 +597,18 @@ def obtain_time_series_xarray(
 
 
 def run_time_series_analysis(folder_data_list):
+    # Plot side by side maps for GFED and ModelE
+    map_figure, map_axis = plt.subplots(
+        nrows=len(folder_data_list),
+        ncols=1,
+        figsize=(18, 10),
+        subplot_kw={"projection": ccrs.PlateCarree()},
+    )
+    time_analysis_figure, time_analysis_axis = plt.subplots(figsize=(10, 6))
+
     # Example usage with test parameters
-    for folder_data in folder_data_list:
+    for index, folder_data in enumerate(folder_data_list):
+        print(index)
         folder_path, parse_data, plot_data, file_type = (
             folder_data["folder_path"],
             folder_data["parse_data"],
@@ -526,6 +630,9 @@ def run_time_series_analysis(folder_data_list):
 
         # Plot the decadal mean burned area
         map_plot(
+            figure=map_figure,
+            axis=map_axis,
+            axis_index=index,
             decade_mean_data=time_mean_data,
             longitude=longitude,
             latitude=latitude,
@@ -534,6 +641,7 @@ def run_time_series_analysis(folder_data_list):
 
         # Plot the time series of burned area for GFED and ModelE
         time_series_plot(
+            axis=time_analysis_axis,
             data=data_per_year_stack,
             marker=plot_data["marker"],
             line_style=plot_data["line_style"],

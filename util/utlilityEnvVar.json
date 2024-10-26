@@ -3,46 +3,45 @@
   "time_analysis_version_two": {
     "folders": [
       {
-        "folder_path": "./data/ModelE",
-        "file_type": "BA_ModelE",
-        "plot_data": {
-          "color": "r",
-          "marker": "x",
-          "line_style": "-",
-          "label": "ModelE BA",
-          "x_label": "Year",
-          "y_label": "Total Burned Area (BA)",
-          "title": "Total Burned Area Over Time (2002-2012)"
-        },
-        "parse_data": {
-          "start_time": 2002,
-          "end_time": 2012,
-          "time_dim_name": "time",
-          "sum_dimensions": ["lat", "lon"]
-        }
-      },
-      {
-        "folder_path": "./data/GFED5",
-        "file_type": "BA",
+        "folder_path": "./data/Lightning",
+        "file_type": "lightning",
         "plot_data": {
           "color": "b",
           "marker": "o",
           "line_style": "-",
-          "label": "GFED Burned Area",
+          "label": "Lighting Data",
           "x_label": "Year",
-          "y_label": "Total Burned Area (BA)",
-          "title": "Total Burned Area Over Time (2002-2012)"
+          "y_label": "Total Lightning Strikes",
+          "title": "Total Lightning Strikes Over Time (1-144)"
         },
         "parse_data": {
-          "start_time": 2002,
-          "end_time": 2012,
-          "time_dim_name": "year",
-          "sum_dimensions": ["phony_dim_0", "phony_dim_1"]
+          "start_time": 1,
+          "end_time": 144,
+          "time_dim_name": "time",
+          "sum_dimensions": ["longitude", "latitude"]
+        }
+      },
+      {
+        "folder_path": "./data/Upscale_Lightning",
+        "file_type": "lightning",
+        "plot_data": {
+          "color": "r",
+          "marker": "x",
+          "line_style": "-",
+          "label": "Lighting Data Upscaled",
+          "x_label": "Year",
+          "y_label": "Total Lightning Strikes (Upscaled)",
+          "title": "Total Lightning Strikes Over Time (1-144)"
+        },
+        "parse_data": {
+          "start_time": 1,
+          "end_time": 144,
+          "time_dim_name": "time",
+          "sum_dimensions": ["longitude", "latitude"]
         }
       }
     ]
   },
-
   "time_analysis": {
     "year_start": 1996,
     "year_end": 1996,

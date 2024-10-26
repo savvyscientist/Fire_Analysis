@@ -16,7 +16,6 @@ def utilityRunner():
         if script == "time_analysis_version_two":
             script_env_data = env_json[script]
             run_time_series_analysis(script_env_data["folders"])
-            pass
 
         elif script == "time_analysis":
             script_env_data = env_json[script]
