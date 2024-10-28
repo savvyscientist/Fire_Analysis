@@ -3,41 +3,41 @@
   "time_analysis_version_two": {
     "folders": [
       {
-        "folder_path": "./data/Lightning",
-        "file_type": "lightning",
+        "folder_path": "./data/GFED4",
+        "file_type": "BA",
         "plot_data": {
           "color": "b",
           "marker": "o",
           "line_style": "-",
-          "label": "Lighting Data",
+          "label": "Burned Area",
           "x_label": "Year",
-          "y_label": "Total Lightning Strikes",
-          "title": "Total Lightning Strikes Over Time (1-144)"
+          "y_label": "Burned Area",
+          "title": "Total Burned Area Over Time (2002-2012)"
         },
         "parse_data": {
-          "start_time": 1,
-          "end_time": 144,
+          "start_time": 2002,
+          "end_time": 2012,
           "time_dim_name": "time",
-          "sum_dimensions": ["longitude", "latitude"]
+          "sum_dimensions": ["phony_dim_0", "phony_dim_1"]
         }
       },
       {
-        "folder_path": "./data/Upscale_Lightning",
-        "file_type": "lightning",
+        "folder_path": "./data/ModelE",
+        "file_type": "BA_ModelE",
         "plot_data": {
           "color": "r",
           "marker": "x",
           "line_style": "-",
-          "label": "Lighting Data Upscaled",
+          "label": "Burned Area Model",
           "x_label": "Year",
-          "y_label": "Total Lightning Strikes (Upscaled)",
-          "title": "Total Lightning Strikes Over Time (1-144)"
+          "y_label": "Burned Area Model",
+          "title": "Burned Area ModelE Over Time (1-144)"
         },
         "parse_data": {
-          "start_time": 1,
-          "end_time": 144,
+          "start_time": 2002,
+          "end_time": 2012,
           "time_dim_name": "time",
-          "sum_dimensions": ["longitude", "latitude"]
+          "sum_dimensions": ["lon", "lat"]
         }
       }
     ]
