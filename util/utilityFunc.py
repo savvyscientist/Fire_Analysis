@@ -324,7 +324,7 @@ def read_gfed4s(files):
     return total_burned_area_all_years, lon, lat
 
 
-def read_ModelEBA(files):
+def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=False):
     """
     Reads ModelE BA data (BA_tree, BA_shrub, BA_grass) for the given year range, sums them to calculate
     modelE_BA, and returns the annual sum for each year.
@@ -348,31 +348,36 @@ def read_ModelEBA(files):
         print(file_path)
         ds = xr.open_dataset(file_path)
 
-        # Read BA_tree, BA_shrub, BA_grass and set negative values to zero
-        BA_tree = ds["BA_tree"].where(ds["BA_tree"] > 0.0, 0.0)
-        BA_shrub = ds["BA_shrub"].where(ds["BA_shrub"] > 0.0, 0.0)
-        BA_grass = ds["BA_grass"].where(ds["BA_grass"] > 0.0, 0.0)
+        modelE_var_data = np.zeros(shape=(90, 144))
+        for variable in variables:
+            var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
+            modelE_var_data = modelE_var_data + var_data
 
-        # Sum BA_tree, BA_shrub, and BA_grass to get modelE_BA
-        modelE_BA = BA_tree + BA_shrub + BA_grass
+        if lightning:
+            grid_cell_area = calculate_grid_area(
+                grid_area_shape=(modelE_var_data.shape[-2], modelE_var_data.shape[-1])
+            )
+            modelE_var_data = (
+                (modelE_var_data * grid_cell_area) * KM_NEG_2TOM_NEG_2 / DAYS_TO_SECONDS
+            )
 
         # Add a time coordinate based on the year from the file name
         year = int(file_path.split("ANN")[1][:4])
-        modelE_BA = modelE_BA.expand_dims(
+        modelE_var_data = modelE_var_data.expand_dims(
             time=[year]
         )  # Add time dimension for each year
 
         # Append the processes dataset to the list
-        datasets.append(modelE_BA)
+        datasets.append(modelE_var_data)
     # Concatenate all datasets along the 'time' dimension
-    modelE_BA_all_year = xr.concat(datasets, dim="time")
+    modelE_all_year = xr.concat(datasets, dim="time")
     modelE_lons = ds["lon"]
     modelE_lats = ds["lat"]
 
-    return modelE_BA_all_year, modelE_lons, modelE_lats
+    return modelE_all_year, modelE_lons, modelE_lats
 
 
-def read_lightning_data(files):
+def read_lightning_data(files, upscale=False):
     """
     Reads multiple lightning files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
@@ -398,11 +403,14 @@ def read_lightning_data(files):
                 attribute_dict[attr_name] = getattr(density_variable, attr_name)
 
             for month in range(len(density_variable[:])):
-                var_data_array = (
-                    (density_variable[:][month] * grid_cell_area)
-                    * KM_NEG_2TOM_NEG_2
-                    / DAYS_TO_SECONDS
-                )
+                if upscale:
+                    var_data_array = density_variable[:][month]
+                else:
+                    var_data_array = (
+                        (density_variable[:][month] * grid_cell_area)
+                        * KM_NEG_2TOM_NEG_2
+                        / DAYS_TO_SECONDS
+                    )
 
                 print(f"density_month_{(month + 1)}")
                 updated_var_data_array.append(var_data_array)
@@ -541,9 +549,31 @@ def map_plot(
     )
 
 
+def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
+    match (NetCDF_Type):
+        case "ModelE":
+            total_value, longitude, latitude = read_ModelE(
+                files=file_paths, variables=variables
+            )
+        case "ModelE_lightning":
+            total_value, longitude, latitude = read_ModelE(
+                files=file_paths, variables=variables, lightning=True
+            )
+        case "BA":
+            total_value, longitude, latitude = read_gfed4s(files=file_paths)
+        case "lightning":
+            total_value, longitude, latitude = read_lightning_data(files=file_paths)
+        case "lightning_upscale":
+            total_value, longitude, latitude = read_lightning_data(
+                files=file_paths, upscale=True
+            )
+    return (total_value, longitude, latitude)
+
+
 def obtain_time_series_xarray(
     start_time,
     end_time,
+    variables,
     time_dimension_name,
     sum_dimension,
     NetCDF_folder_Path,
@@ -569,23 +599,16 @@ def obtain_time_series_xarray(
 
     # Call read_gfed4s to load GFED4s data
     file_paths = obtain_netcdf_files(NetCDF_folder_Path)
-    match (NetCDF_Type):
-        case "BA_ModelE":
-            total_burned_area_all_years, longitude, latitude = read_ModelEBA(file_paths)
-        case "BA":
-            total_burned_area_all_years, longitude, latitude = read_gfed4s(file_paths)
-        case "lightning":
-            total_burned_area_all_years, longitude, latitude = read_lightning_data(
-                file_paths
-            )
+    total_value, longitude, latitude = handle_time_extraction_type(
+        file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type
+    )
 
     # Calculate the mean burned area over the decade
-    time_mean_data = total_burned_area_all_years.mean(dim=time_dimension_name)
+    time_mean_data = total_value.mean(dim=time_dimension_name)
 
     # Calculate total burned area for each year from GFED4s data
-    total_data_array = total_burned_area_all_years.sum(dim=sum_dimension).values
+    total_data_array = total_value.sum(dim=sum_dimension).values
     years = np.arange(start_time, end_time + 1)
-    print(years, total_data_array)
     data_per_year_stack = np.column_stack((years, total_data_array))
 
     return (
@@ -609,11 +632,12 @@ def run_time_series_analysis(folder_data_list):
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
         print(index)
-        folder_path, parse_data, plot_data, file_type = (
+        folder_path, parse_data, plot_data, file_type, variables = (
             folder_data["folder_path"],
             folder_data["parse_data"],
             folder_data["plot_data"],
             folder_data["file_type"],
+            folder_data["variables"],
         )
 
         # Call intann_BA_xarray to calculate decadal mean BA and interannual variability
@@ -621,6 +645,7 @@ def run_time_series_analysis(folder_data_list):
             obtain_time_series_xarray(
                 NetCDF_folder_Path=folder_path,
                 NetCDF_Type=file_type,
+                variables=variables,
                 start_time=parse_data["start_time"],
                 end_time=parse_data["end_time"],
                 time_dimension_name=parse_data["time_dim_name"],
