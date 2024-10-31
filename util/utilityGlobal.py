@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 
 EARTH_RADIUS = 6371000
 KM_NEG_2TOM_NEG_2 = 10**-6
+KM_SQUARED_TO_METERS_SQUARED = 1000000
 DAYS_TO_SECONDS = 60 * 60 * 24
 SCRIPTS_ENV_VARIABLES = "utlilityEnvVar.json"
 MONTHLIST = [

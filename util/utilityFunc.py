@@ -33,6 +33,7 @@ from utilityGlobal import (
     COLOR_MAP,
     SQM_TO_SQHA,
     KM_NEG_2TOM_NEG_2,
+    KM_SQUARED_TO_METERS_SQUARED,
     DAYS_TO_SECONDS,
     EARTH_RADIUS,
 )
@@ -49,6 +50,7 @@ def extract_scaling_factor(units):
     """
     try:
         match = re.match(r"^(10\^(-?\d+)|[-+]?\d*\.?\d+([eE][-+]?\d+)?)\s*(.*)$", units)
+        print(match.groupdict())
         if match:
             if match.group(1).startswith("10^"):
                 scaling_factor = float(10) ** float(match.group(2))
@@ -58,10 +60,6 @@ def extract_scaling_factor(units):
         return scaling_factor, unit
     except:
         return 1.0, units  # Default scaling factor is 1 if not specified
-
-
-def subplot(var_data):
-    pass
 
 
 ######################################################
@@ -365,12 +363,11 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
             modelE_var_data = modelE_var_data + var_data
 
         if lightning:
-            grid_cell_area = calculate_grid_area(
-                grid_area_shape=(modelE_var_data.shape[-2], modelE_var_data.shape[-1])
-            )
-            modelE_var_data = (
-                (modelE_var_data * grid_cell_area) * KM_NEG_2TOM_NEG_2 / DAYS_TO_SECONDS
-            )
+            # !! extract units using extract_scaling_factor (had issues extracting scale factor)
+            # units_string = ds[variable].attrs["units"]
+            # scaling_factor, units = extract_scaling_factor(units_string)
+            # modelE_var_data = modelE_var_data
+            pass
 
         # Add a time coordinate based on the year from the file name
         year = int(file_path.split("ANN")[1][:4])
@@ -414,11 +411,12 @@ def read_lightning_data(files, upscale=False):
                 attribute_dict[attr_name] = getattr(density_variable, attr_name)
 
             for month in range(len(density_variable[:])):
+                var_data_array = density_variable[:][month]
                 if upscale:
                     var_data_array = density_variable[:][month]
                 else:
                     var_data_array = (
-                        (density_variable[:][month] * grid_cell_area)
+                        (density_variable[:][month])
                         * KM_NEG_2TOM_NEG_2
                         / DAYS_TO_SECONDS
                     )
