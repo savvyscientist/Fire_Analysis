@@ -27,10 +27,10 @@
         "file_type": "lightning",
         "variables": [],
         "plot_data": {
-          "color": "b",
+          "color": "r",
           "marker": "x",
           "line_style": "-",
-          "label": "Lighting Data",
+          "label": "Lighting Data Upscale",
           "x_label": "Year",
           "y_label": "Total Lightning Strikes (Upscaled)",
           "title": "Total Lightning Strikes Over Time (1-144)"
@@ -45,9 +45,29 @@
       {
         "folder_path": "./data/ModelE",
         "file_type": "ModelE_lightning",
-        "variables": ["FLASH"],
+        "variables": ["CtoG"],
         "plot_data": {
           "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "Lightning CtoG ModelE",
+          "x_label": "Year",
+          "y_label": "Lightning ModelE",
+          "title": "Lightning CtoG ModelE Over Time (1-12)"
+        },
+        "parse_data": {
+          "start_time": 1,
+          "end_time": 400,
+          "time_dim_name": "time",
+          "sum_dimensions": ["lon", "lat"]
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE_lightning",
+        "variables": ["FLASH"],
+        "plot_data": {
+          "color": "b",
           "marker": "x",
           "line_style": "-",
           "label": "Lightning ModelE",
