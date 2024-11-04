@@ -639,6 +639,17 @@ def obtain_time_series_xarray(
     time_mean_data = total_value.mean(dim=time_dimension_name)
 
     # Calculate total burned area for each year from GFED4s data
+    #this is fine for BA which is in units of m^2 or km^2, but is not OK
+    #for density variables like flash density or pollutant concentration
+    # which is reported in #/m^2 or #/km^2 
+    #To fix for all variables that have an area unit dependancy in the units: 
+    #(total_value*area_matrix).sum(dim=sum_dimension).values
+    #but make the units need to be revised accordingly and are not area dependant any more
+    #if data_units string includes /m^2 or m^-2
+    #somethign like this: match = re.match("m^-2"or"/m^2 ", units) then:
+    #(total_value*area_matrix).sum(dim=sum_dimension).values
+    #else 
+    #total_data_array = total_value.sum(dim=sum_dimension).values
     total_data_array = total_value.sum(dim=sum_dimension).values
     print(total_data_array)
     years = np.arange(start_time, end_time + 1)
