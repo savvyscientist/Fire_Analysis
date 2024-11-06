@@ -27,8 +27,8 @@
         "file_type": "lightning",
         "variables": [],
         "plot_data": {
-          "color": "r",
-          "marker": "x",
+          "color": "y",
+          "marker": "o",
           "line_style": "-",
           "label": "Lighting Data Upscale",
           "x_label": "Year",
@@ -68,7 +68,7 @@
         "variables": ["FLASH"],
         "plot_data": {
           "color": "b",
-          "marker": "x",
+          "marker": "o",
           "line_style": "-",
           "label": "Lightning ModelE",
           "x_label": "Year",

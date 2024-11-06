@@ -50,7 +50,6 @@ def extract_scaling_factor(units):
     """
     try:
         match = re.match(r"^(10\^(-?\d+)|[-+]?\d*\.?\d+([eE][-+]?\d+)?)\s*(.*)$", units)
-        print(match.groupdict())
         if match:
             if match.group(1).startswith("10^"):
                 scaling_factor = float(10) ** float(match.group(2))
@@ -288,7 +287,6 @@ def read_gfed4s(files, upscale=False, shape=(720, 1440)):
 
     for file_path in files:
         # Open the HDF5 file using h5py
-        print(file_path)
         with h5py.File(file_path, "r") as h5file:
             # Load lat and lon for constructing the xarray dataset
             lat = h5file["lat"][:]
@@ -356,21 +354,23 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
     for file_path in files:
         print(file_path)
         ds = xr.open_dataset(file_path)
+        attribute_dict = {}
 
         modelE_var_data = np.zeros(shape=(90, 144))
         for variable in variables:
             var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
+
             modelE_var_data = modelE_var_data + var_data
+
+            for attr_name in ds[variable].attrs:
+                attribute_dict[attr_name] = getattr(ds[variable], attr_name)
 
         if lightning:
             # !! extract units using extract_scaling_factor (had issues extracting scale factor)
             try:
-                units_string = ds[variable].attrs["units"]
-                scaling_factor1, unit = extract_scaling_factor(units_string)
-                scaling_factor = 10**-10
-                print(scaling_factor1, unit)
-                modelE_var_data = modelE_var_data * scaling_factor
-                pass
+                units_string = attribute_dict["units"]
+                print(units_string)
+                modelE_var_data = modelE_var_data * (10**-10)
             except:
                 pass
 
@@ -384,6 +384,8 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
         datasets.append(modelE_var_data)
     # Concatenate all datasets along the 'time' dimension
     modelE_all_year = xr.concat(datasets, dim="time")
+    modelE_all_year.attrs = attribute_dict
+    print(modelE_all_year.attrs)
     modelE_lons = ds["lon"]
     modelE_lats = ds["lat"]
 
@@ -403,39 +405,33 @@ def read_lightning_data(files, upscale=False):
             updated_var_data_array = []
 
             # update the units to match the upscaling process
-            attribute_dict["units"] = "m^2"
-
             density_variable = netcdf_dataset.variables["density"]
             time_data_array = netcdf_dataset.variables["time"][:]
-            grid_cell_area = calculate_grid_area(
-                grid_area_shape=(density_variable.shape[-2], density_variable.shape[-1])
-            )
-            print(getattr(density_variable, "units"))
             # Copy attributes of the burned area fraction
             for attr_name in density_variable.ncattrs():
                 attribute_dict[attr_name] = getattr(density_variable, attr_name)
 
             for month in range(len(density_variable[:])):
-                var_data_array = density_variable[:][month]
                 # change to upscaled checks if the data is already upscaled
                 if upscale:
                     var_data_array = density_variable[:][month]
                 # if the data is not upscaled preform further calculations
                 else:
-                    # issue
+                    # var_data_array = density_variable[:][month]
                     var_data_array = (
                         (density_variable[:][month])
                         * KM_NEG_2TOM_NEG_2
-                        * DAYS_TO_SECONDS
+                        / DAYS_TO_SECONDS
                     )
 
-                print(var_data_array.sum())
                 print(f"density_month_{(month + 1)}")
                 updated_var_data_array.append(var_data_array)
 
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
             longitudes = np.linspace(-180, 180, density_variable.shape[-1])
 
+            print(attribute_dict)
+            attribute_dict["units"] = "lightning strikes/m^2/s"
             # creates the data array and saves it to a file
             var_data_array_xarray = xr.DataArray(
                 (updated_var_data_array),
@@ -545,6 +541,7 @@ def map_plot(
     longitude,
     latitude,
     subplot_title,
+    units,
 ):
     """
     Plots the decadal mean burned area of both GFED and ModelE side by side.
@@ -569,7 +566,7 @@ def map_plot(
         labelpad=0.5,
         fontsize=10,
         title=subplot_title,
-        clabel="BA [$m^2$]",
+        clabel=units,
         masx=0.7 * decade_mean_data.max(),
         is_diff=True,
     )
@@ -599,6 +596,8 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             total_value, longitude, latitude = read_lightning_data(
                 files=file_paths, upscale=True
             )
+        case _:
+            print("[-] No Parsing Script Found For", NetCDF_Type)
     return (total_value, longitude, latitude)
 
 
@@ -639,34 +638,43 @@ def obtain_time_series_xarray(
     time_mean_data = total_value.mean(dim=time_dimension_name)
 
     # Calculate total burned area for each year from GFED4s data
-    #this is fine for BA which is in units of m^2 or km^2, but is not OK
-    #for density variables like flash density or pollutant concentration
-    # which is reported in #/m^2 or #/km^2 
-    #To fix for all variables that have an area unit dependancy in the units: 
-    #(total_value*area_matrix).sum(dim=sum_dimension).values
-    #but make the units need to be revised accordingly and are not area dependant any more
-    #if data_units string includes /m^2 or m^-2
-    #somethign like this: match = re.match("m^-2"or"/m^2 ", units) then:
-    #(total_value*area_matrix).sum(dim=sum_dimension).values
-    #else 
-    #total_data_array = total_value.sum(dim=sum_dimension).values
-    total_data_array = total_value.sum(dim=sum_dimension).values
-    print(total_data_array)
+    # this is fine for BA which is in units of m^2 or km^2, but is not OK
+    # for density variables like flash density or pollutant concentration
+    # which is reported in #/m^2 or #/km^2
+    # To fix for all variables that have an area unit dependancy in the units:
+    # (total_value*area_matrix).sum(dim=sum_dimension).values
+    # but make the units need to be revised accordingly and are not area dependant any more
+    # if data_units string includes /m^2 or m^-2
+    # somethign like this: match = re.match("m^-2"or"/m^2 ", units) then:
+    # (total_value*area_matrix).sum(dim=sum_dimension).values
+    # else
+    # total_data_array = total_value.sum(dim=sum_dimension).values
+
+    units = total_value.attrs["units"]
+    if (
+        "m2" in units.lower()
+        or "m-2".lower() in units
+        or "m^2".lower() in units
+        or "m^-2".lower() in units
+    ):
+        grid_cell_area = calculate_grid_area(
+            grid_area_shape=(total_value.shape[-2], total_value.shape[-1])
+        )
+        print(grid_cell_area)
+        total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimension).values
+        print("Data Array multiplied by grid_cell_area")
+
     years = np.arange(start_time, end_time + 1)
     if len(years) != len(total_data_array):
         years = np.arange(0, len(total_data_array))
     data_per_year_stack = np.column_stack((years, total_data_array))
-    try:
-        units = total_value.attrs["units"]
-    except:
-        units = None
-    print(units)
 
     return (
         time_mean_data,
         data_per_year_stack,
         longitude,
         latitude,
+        units,
     )
 
 
@@ -692,7 +700,7 @@ def run_time_series_analysis(folder_data_list):
         )
 
         # Call intann_BA_xarray to calculate decadal mean BA and interannual variability
-        time_mean_data, data_per_year_stack, longitude, latitude = (
+        time_mean_data, data_per_year_stack, longitude, latitude, units = (
             obtain_time_series_xarray(
                 NetCDF_folder_Path=folder_path,
                 NetCDF_Type=file_type,
@@ -714,6 +722,7 @@ def run_time_series_analysis(folder_data_list):
             longitude=longitude,
             latitude=latitude,
             subplot_title=plot_data["title"],
+            units=units,
         )
 
         print(data_per_year_stack)
