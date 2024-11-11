@@ -18,7 +18,7 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-from utilityGlobal import (
+from utilityGlobalBA import (
     SCRIPTS_ENV_VARIABLES,
     MONTHLIST,
     DISTINCT_COLORS,
@@ -586,10 +586,6 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             total_value, longitude, latitude = read_ModelE(
                 files=file_paths, variables=variables
             )
-        case "ModelE_lightning":
-            total_value, longitude, latitude = read_ModelE(
-                files=file_paths, variables=variables, lightning=True
-            )
         case "lightning":
             total_value, longitude, latitude = read_lightning_data(files=file_paths)
         case "lightning_upscale":
@@ -601,6 +597,9 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
     return (total_value, longitude, latitude)
 
 
+#?????? decide whether the climatological total should become a mean
+#and if so, do we want to weigh the monthly data according to the number
+#of days in a month
 def obtain_time_series_xarray(
     start_time,
     end_time,
@@ -608,7 +607,7 @@ def obtain_time_series_xarray(
     time_dimension_name,
     sum_dimension,
     NetCDF_folder_Path,
-    NetCDF_Type="BA",
+    NetCDF_Type,
 ):
     """
     Calculates the decade mean burned area (BA) and the interannual variability of BA
@@ -628,14 +627,12 @@ def obtain_time_series_xarray(
       - modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the total burned area from ModelE.
     """
 
-    # Call read_gfed4s to load GFED4s data
+    # Call read_XX to load read data from netcdf file
     file_paths = obtain_netcdf_files(NetCDF_folder_Path)
     total_value, longitude, latitude = handle_time_extraction_type(
         file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type
     )
 
-    # Calculate the mean burned area over the decade
-    time_mean_data = total_value.mean(dim=time_dimension_name)
 
     # Calculate total burned area for each year from GFED4s data
     # this is fine for BA which is in units of m^2 or km^2, but is not OK
@@ -651,16 +648,21 @@ def obtain_time_series_xarray(
     # total_data_array = total_value.sum(dim=sum_dimension).values
 
     units = total_value.attrs["units"]
+    # Calculate climatological total over the time dimension
+    time_total_data = total_value.sum(dim=time_dimension_name)
     if (
         "m2" in units.lower()
-        or "m-2".lower() in units
         or "m^2".lower() in units
+    ):
+        # Calculate the lat-lon total over the climatological period
+        total_data_array = total_value.sum(dim=sum_dimension).values
+    elif (
+        "m-2".lower() 
         or "m^-2".lower() in units
     ):
+        # Calculate the lat-lon total over the climatological period
         grid_cell_area = calculate_grid_area(
-            grid_area_shape=(total_value.shape[-2], total_value.shape[-1])
-        )
-        print(grid_cell_area)
+            grid_area_shape=(total_value.shape[-2], total_value.shape[-1]))
         total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimension).values
         print("Data Array multiplied by grid_cell_area")
 
@@ -670,7 +672,7 @@ def obtain_time_series_xarray(
     data_per_year_stack = np.column_stack((years, total_data_array))
 
     return (
-        time_mean_data,
+        time_total_data,
         data_per_year_stack,
         longitude,
         latitude,
@@ -680,6 +682,7 @@ def obtain_time_series_xarray(
 
 def run_time_series_analysis(folder_data_list):
     # Plot side by side maps for GFED and ModelE
+    # Creates the figures for the map and time analysis line plot
     axis_length = len(folder_data_list)
     map_figure, map_axis = plt.subplots(
         nrows=axis_length,

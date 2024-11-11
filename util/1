@@ -3,85 +3,65 @@
   "time_analysis_version_two": {
     "folders": [
       {
-        "folder_path": "./data/Upscale_Lightning",
-        "file_type": "lightning_upscale",
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/regridding",
+        "file_type": "BA",
         "variables": [],
         "plot_data": {
           "color": "r",
           "marker": "x",
           "line_style": "-",
-          "label": "Lighting Data Upscale",
+          "label": "Burned Area GFED4",
           "x_label": "Year",
-          "y_label": "Total Lightning Strikes (Upscaled)",
-          "title": "Total Lightning Strikes Over Time (1-144)"
+          "y_label": "Total Burned Area GFED4",
+          "title": "Total Burned Area (2002-2012)"
         },
         "parse_data": {
           "start_time": 1,
-          "end_time": 40000,
+          "end_time": 2012,
           "time_dim_name": "time",
-          "sum_dimensions": ["longitude", "latitude"]
+          "sum_dimensions": ["phony_dim_0", "phony_dim_1"]
         }
       },
       {
-        "folder_path": "./data/Lightning",
-        "file_type": "lightning",
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/regridding/upscale",
+        "file_type": "BA_upscale",
         "variables": [],
-        "plot_data": {
-          "color": "y",
-          "marker": "o",
-          "line_style": "-",
-          "label": "Lighting Data Upscale",
-          "x_label": "Year",
-          "y_label": "Total Lightning Strikes (Upscaled)",
-          "title": "Total Lightning Strikes Over Time (1-144)"
-        },
-        "parse_data": {
-          "start_time": 1,
-          "end_time": 40000,
-          "time_dim_name": "time",
-          "sum_dimensions": ["longitude", "latitude"]
-        }
-      },
-      {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE_lightning",
-        "variables": ["CtoG"],
-        "plot_data": {
-          "color": "g",
-          "marker": "x",
-          "line_style": "-",
-          "label": "Lightning CtoG ModelE",
-          "x_label": "Year",
-          "y_label": "Lightning ModelE",
-          "title": "Lightning CtoG ModelE Over Time (1-12)"
-        },
-        "parse_data": {
-          "start_time": 1,
-          "end_time": 400,
-          "time_dim_name": "time",
-          "sum_dimensions": ["lon", "lat"]
-        }
-      },
-      {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE_lightning",
-        "variables": ["FLASH"],
         "plot_data": {
           "color": "b",
           "marker": "o",
           "line_style": "-",
-          "label": "Lightning ModelE",
+          "label": "Burned Area GFED4 Upscaled",
           "x_label": "Year",
-          "y_label": "Lightning ModelE",
-          "title": "Lightning ModelE Over Time (1-12)"
+          "y_label": "Total Burned Area GFED4 Upscaled",
+          "title": "Total Burned Area Upscaled (2002-2012)"
         },
         "parse_data": {
           "start_time": 1,
-          "end_time": 400,
+          "end_time": 2012,
           "time_dim_name": "time",
-          "sum_dimensions": ["lon", "lat"]
+          "sum_dimensions": ["lat", "lon"]
         }
       }
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nk_CCycle_E6obioF40",
+        "file_type": "ModelE",
+        "variables": ["BA_grass","BA_shrub","BA_tree"],
+        "plot_data": {
+          "color": "y",
+          "marker": "o",
+          "line_style": "-",
+          "label": "BA ModelE",
+          "x_label": "Year",
+          "y_label": "Total BA",
+          "title": "Total ModelE BA Over Time (1-144)"
+        },
+        "parse_data": {
+          "start_time": 1,
+          "end_time": 40000,
+          "time_dim_name": "time",
+          "sum_dimensions": ["longitude", "latitude"]
+        }
+      },
     ]
   },
   "time_analysis": {
