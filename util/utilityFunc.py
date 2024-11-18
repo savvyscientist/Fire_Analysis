@@ -18,7 +18,7 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-from utilityGlobalBA import (
+from utilityGlobal import (
     SCRIPTS_ENV_VARIABLES,
     MONTHLIST,
     DISTINCT_COLORS,
@@ -358,7 +358,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
 
         modelE_var_data = np.zeros(shape=(90, 144))
         for variable in variables:
-            var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
+            var_data = ds[variable].where(ds[variable] < 0.0, 0.0)
 
             modelE_var_data = modelE_var_data + var_data
 
