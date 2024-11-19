@@ -189,9 +189,6 @@ def time_series_plot(
     line_style,
     color,
     label,
-    title,
-    x_label,
-    y_label,
     grid_visible=True,
 ):
     """
@@ -202,27 +199,24 @@ def time_series_plot(
     modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the sum of burned area for that year.
     """
 
-    try:
-        # Extract years and total burned area for both GFED and ModelE
-        years_data = data[:, 0]
-        total_data = data[:, 1]
+    # try:
+    # Extract years and total burned area for both GFED and ModelE
+    years_data = data[:, 0]
+    total_data = data[:, 1]
 
-        # Plot the time series of total burned area for both GFED and ModelE
-        axis.plot(
-            years_data,
-            total_data,
-            marker=marker,
-            linestyle=line_style,
-            color=color,
-            label=label,
-        )
-        axis.title(title)
-        axis.xlabel(x_label)
-        axis.ylabel(y_label)
-        axis.legend()
-        axis.grid(grid_visible)
-    except:
-        print("title, xlabel...etc already set")
+    # Plot the time series of total burned area for both GFED and ModelE
+    axis.plot(
+        years_data,
+        total_data,
+        marker=marker,
+        linestyle=line_style,
+        color=color,
+        label=label,
+    )
+    axis.legend()
+    axis.grid(grid_visible)
+    # except:
+    #     print("title, xlabel...etc already set")
 
 
 def obtain_netcdf_files(dir_path) -> list:
@@ -358,6 +352,8 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
 
         modelE_var_data = np.zeros(shape=(90, 144))
         for variable in variables:
+            # where function replaces values that do not meet the parameters condition
+            # (replaces all values that are not greater than 0)
             var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
 
             modelE_var_data = modelE_var_data + var_data
@@ -368,8 +364,11 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
         if lightning:
             # !! extract units using extract_scaling_factor (had issues extracting scale factor)
             try:
-                # units_string = attribute_dict["units"]
-                modelE_var_data = modelE_var_data
+                units_string = attribute_dict["units"]
+                scaling_factor = units_string.split()[0]
+                # print("SCALING FACTOR:", scaling_factor)
+                # print("UNITS:", units_string)
+                modelE_var_data = modelE_var_data * float(scaling_factor)
                 pass
             except:
                 pass
@@ -391,46 +390,59 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
     return modelE_all_year, modelE_lons, modelE_lats
 
 
-def read_lightning_data(files, upscaled=False):
+def read_lightning_data(files, yearly=True, upscaled=False):
     """
     Reads multiple lightning files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
     """
+    start_date = "2010-01-01"
     for file in files:
         with nc.Dataset(file) as netcdf_dataset:
             # dataset containing all xarray data array (used to create the final netcdf file)
             dataset_dict = {}
             attribute_dict = {}
+            yearly_var_data_array = []
+            year_time_data = []
             updated_var_data_array = []
 
             # update the units to match the upscaling process
             density_variable = netcdf_dataset.variables["density"]
+            density_variable_data = netcdf_dataset.variables["density"][:]
+            # density_variable_data = density_variable_data.where(
+            #     density_variable_data > 0.0, 0.0
+            # )
             time_data_array = netcdf_dataset.variables["time"][:]
-            print(netcdf_dataset.variables["time"])
+
+            # print(netcdf_dataset.variables["time"])
 
             # Copy attributes of the burned area fraction
             for attr_name in density_variable.ncattrs():
                 attribute_dict[attr_name] = getattr(density_variable, attr_name)
 
-            for month in range(len(density_variable[:])):
-                grid_cell_dimension_shape = (
-                    density_variable[:][month].shape[-2],
-                    density_variable[:][month].shape[-1],
-                )
-                grid_cell_area = calculate_grid_area(
-                    grid_area_shape=grid_cell_dimension_shape
-                )
+            date_range = pd.date_range(
+                start_date, freq="MS", periods=len(density_variable_data)
+            )
+            variable_data = np.zeros(shape=(density_variable_data[0].shape))
+            year = int(start_date.split("-")[0])
+            for month in range(len(density_variable_data)):
+                current_year = int(str(date_range[month]).split("-")[0])
                 # change to upscaled checks if the data is already upscaled
                 if upscaled:
-                    var_data_array = density_variable[:][month]
+                    var_data_array = density_variable_data[month]
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
                     var_data_array = (
-                        density_variable[:][month] * KM_SQUARED_TO_M_SQUARED
+                        density_variable_data[month] * KM_SQUARED_TO_M_SQUARED
                     ) / (DAYS_TO_SECONDS)
                 attribute_dict["units"] = "lightning strikes/m2/s"
-                print(f"Current Month {month}: ", var_data_array.sum())
+                variable_data = variable_data + var_data_array
+                if (year) < (current_year):
+                    year = current_year
+                    year_time_data.append(str(year))
+                    yearly_var_data_array.append(variable_data)
+                    variable_data = np.zeros(shape=(density_variable_data[0].shape))
+                # print(f"Current Month {month}: ", var_data_array.sum())
                 updated_var_data_array.append(var_data_array)
 
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
@@ -447,7 +459,24 @@ def read_lightning_data(files, upscaled=False):
                 attrs=attribute_dict,
             )
 
-            return var_data_array_xarray, longitudes, latitudes
+            latitudes = np.linspace(-90, 90, density_variable.shape[-2])
+            longitudes = np.linspace(-180, 180, density_variable.shape[-1])
+            yearly_var_data_array_xarray = xr.DataArray(
+                (yearly_var_data_array),
+                coords={
+                    "time": year_time_data,
+                    "latitude": latitudes,
+                    "longitude": longitudes,
+                },
+                dims=["time", "latitude", "longitude"],
+                attrs=attribute_dict,
+            )
+
+            return (
+                (yearly_var_data_array_xarray if yearly else var_data_array_xarray),
+                longitudes,
+                latitudes,
+            )
 
 
 def define_subplot(
@@ -515,14 +544,14 @@ def define_subplot(
     else:
         norm = None
         # Mask values less than or equal to zero for the custom colormap (set to white)
-        masked_data = np.ma.masked_less_equal(data, 0)  # Mask values <= 0
-        # Create a colormap with white for values <= 0
-        cmap = plt.get_cmap(cmap).copy()
-        cmap.set_bad(color="white")  # Set masked values to white
+        # masked_data = np.ma.masked_less_equal(data, 0)  # Mask values <= 0
+        # # Create a colormap with white for values <= 0
+        # cmap = plt.get_cmap(cmap).copy()
+        # cmap.set_bad(color="white")  # Set masked values to white
         p = ax.pcolormesh(
             lons,
             lats,
-            masked_data,
+            data,
             transform=ccrs.PlateCarree(),
             cmap=cmap,
             norm=norm,
@@ -572,7 +601,7 @@ def map_plot(
         title=subplot_title,
         clabel=units,
         masx=0.7 * decade_mean_data.max(),
-        is_diff=True,
+        is_diff=False,
     )
 
 
@@ -602,8 +631,6 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
 
 
 def obtain_time_series_xarray(
-    start_time,
-    end_time,
     variables,
     NetCDF_folder_Path,
     NetCDF_Type,
@@ -652,6 +679,8 @@ def obtain_time_series_xarray(
     # total_data_array = total_value.sum(dim=sum_dimension).values
 
     units = total_value.attrs["units"]
+    # For model E data display on the figure weather the scaling factor has been multiplied
+
     # Calculate climatological total over the time dimension
     time_total_data = total_value.sum(dim=time_dimension)
     if "m2" in units.lower() or "m^2".lower() in units:
@@ -668,9 +697,9 @@ def obtain_time_series_xarray(
         total_data_array = total_value.sum(dim=sum_dimensions).values
     print("Data Array multiplied by grid_cell_area")
 
-    years = np.arange(start_time, end_time + 1)
-    if len(years) != len(total_data_array):
-        years = np.arange(0, len(total_data_array))
+    start_year = int(total_value.coords["time"].values[0])
+    end_year = int(total_value.coords["time"].values[-1])
+    years = np.arange(start_year, end_year + 1)
     data_per_year_stack = np.column_stack((years, total_data_array))
 
     return (
@@ -679,10 +708,12 @@ def obtain_time_series_xarray(
         longitude,
         latitude,
         units,
+        start_year,
+        end_year,
     )
 
 
-def run_time_series_analysis(folder_data_list):
+def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
     # Plot side by side maps for GFED and ModelE
     axis_length = len(folder_data_list)
     map_figure, map_axis = plt.subplots(
@@ -693,6 +724,8 @@ def run_time_series_analysis(folder_data_list):
     )
     _, time_analysis_axis = plt.subplots(figsize=(10, 6))
 
+    global_year_max = 0
+    global_year_min = 9999
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
         folder_path, figure_data, file_type, variables = (
@@ -703,16 +736,21 @@ def run_time_series_analysis(folder_data_list):
         )
 
         # Call intann_BA_xarray to calculate decadal mean BA and interannual variability
-        time_mean_data, data_per_year_stack, longitude, latitude, units = (
-            obtain_time_series_xarray(
-                NetCDF_folder_Path=folder_path,
-                NetCDF_Type=file_type,
-                variables=variables,
-                start_time=figure_data["start_time"],
-                end_time=figure_data["end_time"],
-            )
+        (
+            time_mean_data,
+            data_per_year_stack,
+            longitude,
+            latitude,
+            units,
+            start_year,
+            end_year,
+        ) = obtain_time_series_xarray(
+            NetCDF_folder_Path=folder_path,
+            NetCDF_Type=file_type,
+            variables=variables,
         )
 
+        figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
         # Plot the decadal mean burned area
         map_plot(
             figure=map_figure,
@@ -722,7 +760,7 @@ def run_time_series_analysis(folder_data_list):
             decade_mean_data=time_mean_data,
             longitude=longitude,
             latitude=latitude,
-            subplot_title=figure_data["title"],
+            subplot_title=figure_label,
             units=units,
         )
 
@@ -733,9 +771,23 @@ def run_time_series_analysis(folder_data_list):
             marker=figure_data["marker"],
             line_style=figure_data["line_style"],
             color=figure_data["color"],
-            label=figure_data["label"],
-            title=figure_data["title"],
-            x_label=figure_data["x_label"],
-            y_label=figure_data["y_label"],
+            label=figure_label,
         )
+        print(end_year, start_year)
+        global_year_max = (
+            int(end_year)
+            if int(global_year_max) < int(end_year)
+            else int(global_year_max)
+        )
+        global_year_min = (
+            int(start_year)
+            if int(global_year_min) > int(start_year)
+            else int(global_year_min)
+        )
+
+    time_analysis_axis.set_title(time_analysis_figure_data["title"])
+    time_analysis_axis.set_xlabel(
+        f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
+    )
+    time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
     plt.show()

@@ -1,6 +1,11 @@
 {
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
+    "time_analysis_figure_data": {
+      "title": "Lightning Data",
+      "xlabel": "Yearly",
+      "ylabel": "Lightning Strikes"
+    },
     "folders": [
       {
         "folder_path": "./data/upscale",
@@ -8,14 +13,9 @@
         "variables": [],
         "figure_data": {
           "color": "r",
-          "marker": "x",
+          "marker": "o",
           "line_style": "-",
-          "label": "Lighting Data Upscale",
-          "x_label": "Year",
-          "y_label": "Total Lightning Strikes (Upscaled)",
-          "title": "Total Lightning Strikes Over Time (1-144)",
-          "start_time": 1,
-          "end_time": 400
+          "label": "Lighting Data Upscale"
         }
       },
       {
@@ -24,14 +24,9 @@
         "variables": [],
         "figure_data": {
           "color": "y",
-          "marker": "x",
+          "marker": "o",
           "line_style": "-",
-          "label": "Lighting Data",
-          "x_label": "Year",
-          "y_label": "Total Lightning Strikes",
-          "title": "Total Lightning Strikes Over Time (1-144)",
-          "start_time": 1,
-          "end_time": 400
+          "label": "Lighting Data"
         }
       },
       {
@@ -42,12 +37,7 @@
           "color": "g",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE CtoG Lightning Data",
-          "x_label": "Year",
-          "y_label": "Total ModelE CtoG Lightning Data",
-          "title": "Total ModelE CtoG Lightning Data (YYYY-YYYY)",
-          "start_time": 1,
-          "end_time": 400
+          "label": "ModelE CtoG Lightning Data"
         }
       },
       {
@@ -56,14 +46,9 @@
         "variables": ["FLASH"],
         "figure_data": {
           "color": "b",
-          "marker": "o",
+          "marker": "x",
           "line_style": "-",
-          "label": "ModelE FLASH Lightning Data",
-          "x_label": "Year",
-          "y_label": "Total ModelE FLASH Lightning Data",
-          "title": "Total ModelE FLASH Lightning Data (YYYY-YYYY)",
-          "start_time": 1,
-          "end_time": 400
+          "label": "ModelE FLASH Lightning Data"
         }
       }
     ]

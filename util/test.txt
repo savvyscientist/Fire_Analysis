@@ -62,3 +62,37 @@
           "end_time": 400
         }
       }
+
+
+            {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["CtoG"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE CtoG Lightning Data",
+          "x_label": "Year",
+          "y_label": "Total ModelE CtoG Lightning Data",
+          "title": "Total ModelE CtoG Lightning Data (YYYY-YYYY)",
+          "start_time": 1,
+          "end_time": 400
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "b",
+          "marker": "o",
+          "line_style": "-",
+          "label": "ModelE FLASH Lightning Data",
+          "x_label": "Year",
+          "y_label": "Total ModelE FLASH Lightning Data",
+          "title": "Total ModelE FLASH Lightning Data (YYYY-YYYY)",
+          "start_time": 1,
+          "end_time": 400
+        }
+      }
