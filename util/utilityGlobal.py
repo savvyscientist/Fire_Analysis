@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 
 
-EARTH_RADIUS = 6371000
+EARTH_RADIUS = 6378000
 KM_NEG_2TOM_NEG_2 = 10**-6
-KM_TO_METERS = 10**6
+KM_SQUARED_TO_M_SQUARED = 10**6
 DAYS_TO_SECONDS = 60 * 60 * 24
-SCRIPTS_ENV_VARIABLES = "utlilityEnvVar.json"
+SCRIPTS_ENV_VARIABLES = "utilityEnvVar.json"
 MONTHLIST = [
     "JAN",
     "FEB",
@@ -72,7 +72,6 @@ GFED_COVER_LABELS = {
     14: "AUST",
     15: "Total",
 }
-
 LAND_COVER_LABELS = {
     0: "Water",
     1: "Boreal forest",

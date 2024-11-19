@@ -1,0 +1,71 @@
+{
+  "selected_script": ["time_analysis_version_two"],
+  "time_analysis_version_two": {
+    "folders": [
+      {
+        "folder_path": "./data/upscale",
+        "file_type": "lightning_upscale",
+        "variables": [],
+        "figure_data": {
+          "color": "r",
+          "marker": "x",
+          "line_style": "-",
+          "label": "Lighting Data Upscale",
+          "x_label": "Year",
+          "y_label": "Total Lightning Strikes (Upscaled)",
+          "title": "Total Lightning Strikes Over Time (1-144)",
+          "start_time": 1,
+          "end_time": 400
+        }
+      },
+      {
+        "folder_path": "./data/Lightning",
+        "file_type": "lightning",
+        "variables": [],
+        "figure_data": {
+          "color": "y",
+          "marker": "x",
+          "line_style": "-",
+          "label": "Lighting Data",
+          "x_label": "Year",
+          "y_label": "Total Lightning Strikes",
+          "title": "Total Lightning Strikes Over Time (1-144)",
+          "start_time": 1,
+          "end_time": 400
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["CtoG"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE CtoG Lightning Data",
+          "x_label": "Year",
+          "y_label": "Total ModelE CtoG Lightning Data",
+          "title": "Total ModelE CtoG Lightning Data (YYYY-YYYY)",
+          "start_time": 1,
+          "end_time": 400
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "b",
+          "marker": "o",
+          "line_style": "-",
+          "label": "ModelE FLASH Lightning Data",
+          "x_label": "Year",
+          "y_label": "Total ModelE FLASH Lightning Data",
+          "title": "Total ModelE FLASH Lightning Data (YYYY-YYYY)",
+          "start_time": 1,
+          "end_time": 400
+        }
+      }
+    ]
+  }
+}

@@ -33,7 +33,7 @@ from utilityGlobal import (
     COLOR_MAP,
     SQM_TO_SQHA,
     KM_NEG_2TOM_NEG_2,
-    KM_TO_METERS,
+    KM_SQUARED_TO_M_SQUARED,
     DAYS_TO_SECONDS,
     EARTH_RADIUS,
 )
@@ -352,7 +352,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
 
     # Loop over each file and process it
     for file_path in files:
-        print(file_path)
+        # print(file_path)
         ds = xr.open_dataset(file_path)
         attribute_dict = {}
 
@@ -368,9 +368,9 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
         if lightning:
             # !! extract units using extract_scaling_factor (had issues extracting scale factor)
             try:
-                units_string = attribute_dict["units"]
-                print(units_string)
-                modelE_var_data = modelE_var_data * (10**-10)
+                # units_string = attribute_dict["units"]
+                modelE_var_data = modelE_var_data
+                pass
             except:
                 pass
 
@@ -385,14 +385,13 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
     # Concatenate all datasets along the 'time' dimension
     modelE_all_year = xr.concat(datasets, dim="time")
     modelE_all_year.attrs = attribute_dict
-    print(modelE_all_year.attrs)
     modelE_lons = ds["lon"]
     modelE_lats = ds["lat"]
 
     return modelE_all_year, modelE_lons, modelE_lats
 
 
-def read_lightning_data(files, upscale=False):
+def read_lightning_data(files, upscaled=False):
     """
     Reads multiple lightning files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
@@ -407,31 +406,35 @@ def read_lightning_data(files, upscale=False):
             # update the units to match the upscaling process
             density_variable = netcdf_dataset.variables["density"]
             time_data_array = netcdf_dataset.variables["time"][:]
+            print(netcdf_dataset.variables["time"])
+
             # Copy attributes of the burned area fraction
             for attr_name in density_variable.ncattrs():
                 attribute_dict[attr_name] = getattr(density_variable, attr_name)
 
             for month in range(len(density_variable[:])):
+                grid_cell_dimension_shape = (
+                    density_variable[:][month].shape[-2],
+                    density_variable[:][month].shape[-1],
+                )
+                grid_cell_area = calculate_grid_area(
+                    grid_area_shape=grid_cell_dimension_shape
+                )
                 # change to upscaled checks if the data is already upscaled
-                if upscale:
+                if upscaled:
                     var_data_array = density_variable[:][month]
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
                     var_data_array = (
-                        (density_variable[:][month])
-                        * KM_NEG_2TOM_NEG_2
-                        / DAYS_TO_SECONDS
-                    )
-
-                print(f"density_month_{(month + 1)}")
+                        density_variable[:][month] * KM_SQUARED_TO_M_SQUARED
+                    ) / (DAYS_TO_SECONDS)
+                attribute_dict["units"] = "lightning strikes/m2/s"
+                print(f"Current Month {month}: ", var_data_array.sum())
                 updated_var_data_array.append(var_data_array)
 
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
             longitudes = np.linspace(-180, 180, density_variable.shape[-1])
-
-            print(attribute_dict)
-            attribute_dict["units"] = "lightning strikes/m^2/s"
             # creates the data array and saves it to a file
             var_data_array_xarray = xr.DataArray(
                 (updated_var_data_array),
@@ -493,6 +496,7 @@ def define_subplot(
     # Handling difference normalization (if is_diff is true)
     if is_diff:
         data_min, data_max = data.min(), data.max()
+        print(data_min, data_max)
         if data_min == data_max:
             norm = mcolors.Normalize(vmin=data_min - 1, vmax=data_max + 1)
         else:
@@ -584,17 +588,13 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
-                files=file_paths, variables=variables
-            )
-        case "ModelE_lightning":
-            total_value, longitude, latitude = read_ModelE(
                 files=file_paths, variables=variables, lightning=True
             )
         case "lightning":
             total_value, longitude, latitude = read_lightning_data(files=file_paths)
         case "lightning_upscale":
             total_value, longitude, latitude = read_lightning_data(
-                files=file_paths, upscale=True
+                files=file_paths, upscaled=True
             )
         case _:
             print("[-] No Parsing Script Found For", NetCDF_Type)
@@ -605,10 +605,8 @@ def obtain_time_series_xarray(
     start_time,
     end_time,
     variables,
-    time_dimension_name,
-    sum_dimension,
     NetCDF_folder_Path,
-    NetCDF_Type="BA",
+    NetCDF_Type,
 ):
     """
     Calculates the decade mean burned area (BA) and the interannual variability of BA
@@ -634,8 +632,11 @@ def obtain_time_series_xarray(
         file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type
     )
 
+    time_dimension = total_value.dims[0]
+    sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
+    print(total_value.dims)
     # Calculate the mean burned area over the decade
-    time_mean_data = total_value.mean(dim=time_dimension_name)
+    time_mean_data = total_value.mean(dim=time_dimension)
 
     # Calculate total burned area for each year from GFED4s data
     # this is fine for BA which is in units of m^2 or km^2, but is not OK
@@ -651,18 +652,21 @@ def obtain_time_series_xarray(
     # total_data_array = total_value.sum(dim=sum_dimension).values
 
     units = total_value.attrs["units"]
-    if (
-        "m2" in units.lower()
-        or "m-2".lower() in units
-        or "m^2".lower() in units
-        or "m^-2".lower() in units
-    ):
-        grid_cell_area = calculate_grid_area(
-            grid_area_shape=(total_value.shape[-2], total_value.shape[-1])
-        )
-        print(grid_cell_area)
-        total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimension).values
-        print("Data Array multiplied by grid_cell_area")
+    # Calculate climatological total over the time dimension
+    time_total_data = total_value.sum(dim=time_dimension)
+    if "m2" in units.lower() or "m^2".lower() in units:
+        # Calculate the lat-lon total over the climatological period
+        total_data_array = total_value.sum(dim=sum_dimensions).values
+    elif "m-2".lower() or "m^-2".lower() in units:
+        # Calculate the lat-lon total over the climatological period
+        grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
+        grid_cell_area = calculate_grid_area(grid_area_shape=grid_cell_dimension_shape)
+        total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
+        print(total_data_array.round(2))
+    # Review cases that work for fractions
+    else:
+        total_data_array = total_value.sum(dim=sum_dimensions).values
+    print("Data Array multiplied by grid_cell_area")
 
     years = np.arange(start_time, end_time + 1)
     if len(years) != len(total_data_array):
@@ -670,7 +674,7 @@ def obtain_time_series_xarray(
     data_per_year_stack = np.column_stack((years, total_data_array))
 
     return (
-        time_mean_data,
+        time_total_data,
         data_per_year_stack,
         longitude,
         latitude,
@@ -691,10 +695,9 @@ def run_time_series_analysis(folder_data_list):
 
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
-        folder_path, parse_data, plot_data, file_type, variables = (
+        folder_path, figure_data, file_type, variables = (
             folder_data["folder_path"],
-            folder_data["parse_data"],
-            folder_data["plot_data"],
+            folder_data["figure_data"],
             folder_data["file_type"],
             folder_data["variables"],
         )
@@ -705,10 +708,8 @@ def run_time_series_analysis(folder_data_list):
                 NetCDF_folder_Path=folder_path,
                 NetCDF_Type=file_type,
                 variables=variables,
-                start_time=parse_data["start_time"],
-                end_time=parse_data["end_time"],
-                time_dimension_name=parse_data["time_dim_name"],
-                sum_dimension=parse_data["sum_dimensions"],
+                start_time=figure_data["start_time"],
+                end_time=figure_data["end_time"],
             )
         )
 
@@ -721,22 +722,20 @@ def run_time_series_analysis(folder_data_list):
             decade_mean_data=time_mean_data,
             longitude=longitude,
             latitude=latitude,
-            subplot_title=plot_data["title"],
+            subplot_title=figure_data["title"],
             units=units,
         )
-
-        print(data_per_year_stack)
 
         # Plot the time series of burned area for GFED and ModelE
         time_series_plot(
             axis=time_analysis_axis,
             data=data_per_year_stack,
-            marker=plot_data["marker"],
-            line_style=plot_data["line_style"],
-            color=plot_data["color"],
-            label=plot_data["label"],
-            title=plot_data["title"],
-            x_label=plot_data["x_label"],
-            y_label=plot_data["y_label"],
+            marker=figure_data["marker"],
+            line_style=figure_data["line_style"],
+            color=figure_data["color"],
+            label=figure_data["label"],
+            title=figure_data["title"],
+            x_label=figure_data["x_label"],
+            y_label=figure_data["y_label"],
         )
     plt.show()
