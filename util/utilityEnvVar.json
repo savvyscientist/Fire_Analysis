@@ -2,53 +2,33 @@
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
     "time_analysis_figure_data": {
-      "title": "Lightning Data",
+      "title": "Fire Data",
       "xlabel": "Yearly",
-      "ylabel": "Lightning Strikes"
+      "ylabel": "Burned Areas"
     },
     "folders": [
       {
-        "folder_path": "./data/upscale",
-        "file_type": "lightning_upscale",
+        "folder_path": "./data/GFED4",
+        "file_type": "BA",
         "variables": [],
         "figure_data": {
           "color": "r",
           "marker": "o",
           "line_style": "-",
-          "label": "Lighting Data Upscale"
+          "label": "Burned Area GFED4 Data",
+          "cbarmac": null
         }
       },
       {
-        "folder_path": "./data/Lightning",
-        "file_type": "lightning",
+        "folder_path": "./data/GFED4_upscaled",
+        "file_type": "BA_upscale",
         "variables": [],
         "figure_data": {
           "color": "y",
           "marker": "o",
           "line_style": "-",
-          "label": "Lighting Data"
-        }
-      },
-      {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE",
-        "variables": ["CtoG"],
-        "figure_data": {
-          "color": "g",
-          "marker": "x",
-          "line_style": "-",
-          "label": "ModelE CtoG Lightning Data"
-        }
-      },
-      {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE",
-        "variables": ["FLASH"],
-        "figure_data": {
-          "color": "b",
-          "marker": "x",
-          "line_style": "-",
-          "label": "ModelE FLASH Lightning Data"
+          "label": "Burned Area GFED4 Upscale Data",
+          "cbarmac": null
         }
       }
     ]

@@ -35,7 +35,8 @@ from utilityGlobal import (
     KM_NEG_2TOM_NEG_2,
     KM_SQUARED_TO_M_SQUARED,
     DAYS_TO_SECONDS,
-    EARTH_RADIUS,
+    EARTH_RADIUS_KM,
+    EARTH_RADIUS_METERS,
 )
 
 
@@ -234,7 +235,7 @@ def obtain_netcdf_files(dir_path) -> list:
     ]
 
 
-def calculate_grid_area(grid_area_shape):
+def calculate_grid_area(grid_area_shape, units="km"):
     # Grid resolution
     nlat = grid_area_shape[0]  # Number of latitude bands
     nlon = grid_area_shape[1]  # Number of longitude bands
@@ -258,9 +259,10 @@ def calculate_grid_area(grid_area_shape):
         # Convert latitude to radians
         lat_rad = np.deg2rad(lat)
 
+        earth_radius = EARTH_RADIUS_KM if units == "km" else EARTH_RADIUS_METERS
         # Calculate the surface area of the grid cell at this latitude
         area = (
-            (EARTH_RADIUS**2)
+            (earth_radius**2)
             * lon_step_rad
             * (np.sin(lat_rad + lat_step_rad / 2) - np.sin(lat_rad - lat_step_rad / 2))
         )
@@ -272,14 +274,16 @@ def calculate_grid_area(grid_area_shape):
     return grid_area
 
 
-def read_gfed4s(files, upscale=False, shape=(720, 1440)):
+def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
     """
     Reads multiple HDF5 files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
     """
     burned_fraction_list = []
+    time_array = []
 
     for file_path in files:
+        attribute_dict = {}
         # Open the HDF5 file using h5py
         with h5py.File(file_path, "r") as h5file:
             # Load lat and lon for constructing the xarray dataset
@@ -289,13 +293,17 @@ def read_gfed4s(files, upscale=False, shape=(720, 1440)):
             # Sum burned fraction over all months
             annual_burned_fraction = np.zeros(shape=shape)
             for month in range(1, 13):
+                burned_area_variable = (
+                    h5file[f"burned_area/{month:02d}/burned_fraction"]
+                    if not upscaled
+                    else h5file[f"burned_areas_{month:02d}"]
+                )
+
                 month_burned_fraction = (
-                    h5file[f"burned_area/{month:02d}/burned_fraction"][:]
-                    if not upscale
-                    else h5file[f"burned_areas_{month:02d}"][:]
+                    burned_area_variable[:] if not upscaled else burned_area_variable[:]
                 )
                 annual_burned_fraction += month_burned_fraction
-            if not upscale:
+            if not upscaled:
                 # Access grid_cell_area using the method suggested
                 grid_cell_area = h5file["ancill"]["grid_cell_area"][:]
                 # Calculate total burned area
@@ -303,22 +311,35 @@ def read_gfed4s(files, upscale=False, shape=(720, 1440)):
             else:
                 total_burned_area = annual_burned_fraction
             burned_fraction_list.append(total_burned_area)
+        year = (
+            file_path.split("_")[1].split(".")[0]
+            if not upscaled
+            else file_path.split("_")[2]
+        )
+        time_array.append(year)
 
+    attribute_dict["units"] = "Global Burned Area m^2"
+    attribute_dict["long_name"] = (
+        'GFED4s burned fraction. Note that this INCLUDES an experimental "small fire" estimate and is thus different from the Giglio et al. (2013) paper'
+    )
     # Convert the list to xarray.DataArray for further processing
     total_burned_area_all_years = (
         xr.DataArray(
             burned_fraction_list,
             dims=["time", "phony_dim_0", "phony_dim_1"],
             coords={
+                "time": time_array,
                 "lat": (["phony_dim_0", "phony_dim_1"], lat),
                 "lon": (["phony_dim_0", "phony_dim_1"], lon),
             },
+            attrs=attribute_dict,
         )
-        if not upscale
+        if not upscaled
         else xr.DataArray(
             burned_fraction_list,
             dims=["time", "lat", "lon"],
-            coords={"lat": lat, "lon": lon},
+            coords={"time": time_array, "lat": lat, "lon": lon},
+            attrs=attribute_dict,
         )
     )
 
@@ -360,18 +381,6 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
 
             for attr_name in ds[variable].attrs:
                 attribute_dict[attr_name] = getattr(ds[variable], attr_name)
-
-        if lightning:
-            # !! extract units using extract_scaling_factor (had issues extracting scale factor)
-            try:
-                units_string = attribute_dict["units"]
-                scaling_factor = units_string.split()[0]
-                # print("SCALING FACTOR:", scaling_factor)
-                # print("UNITS:", units_string)
-                modelE_var_data = modelE_var_data * float(scaling_factor)
-                pass
-            except:
-                pass
 
         # Add a time coordinate based on the year from the file name
         year = int(file_path.split("ANN")[1][:4])
@@ -432,10 +441,8 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
-                    var_data_array = (
-                        density_variable_data[month] * KM_SQUARED_TO_M_SQUARED
-                    ) / (DAYS_TO_SECONDS)
-                attribute_dict["units"] = "lightning strikes/m2/s"
+                    var_data_array = (density_variable_data[month]) / (DAYS_TO_SECONDS)
+                attribute_dict["units"] = "lightning strikes/m-2/s"
                 variable_data = variable_data + var_data_array
                 if (year) < (current_year):
                     year = current_year
@@ -493,10 +500,11 @@ def define_subplot(
     fontsize,
     title,
     clabel,
-    masx,
+    masx=None,
     is_diff=False,
     glob=None,
 ):
+    masx = 0.7 * decade_data.max() if masx == None else masx
     # labelpad sets the distance of the colorbar from the map
     """Define the properties of a subplot with optional difference normalization."""
     ax.coastlines(color="black")
@@ -575,6 +583,7 @@ def map_plot(
     latitude,
     subplot_title,
     units,
+    cbarmac,
 ):
     """
     Plots the decadal mean burned area of both GFED and ModelE side by side.
@@ -600,7 +609,7 @@ def map_plot(
         fontsize=10,
         title=subplot_title,
         clabel=units,
-        masx=0.7 * decade_data.max(),
+        masx=cbarmac,
         is_diff=False,
     )
 
@@ -609,11 +618,11 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
     match (NetCDF_Type):
         case "BA":
             total_value, longitude, latitude = read_gfed4s(
-                files=file_paths, upscale=False
+                files=file_paths, upscaled=False
             )
         case "BA_upscale":
             total_value, longitude, latitude = read_gfed4s(
-                files=file_paths, upscale=True, shape=(90, 144)
+                files=file_paths, upscaled=True, shape=(90, 144)
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
@@ -679,7 +688,6 @@ def obtain_time_series_xarray(
 
     units = total_value.attrs["units"]
     # For model E data display on the figure weather the scaling factor has been multiplied
-
     # Calculate climatological total over the time dimension
     time_total_data = total_value.sum(dim=time_dimension)
     if "m2" in units.lower() or "m^2".lower() in units:
@@ -690,6 +698,7 @@ def obtain_time_series_xarray(
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
         grid_cell_area = calculate_grid_area(grid_area_shape=grid_cell_dimension_shape)
         total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
+        print(total_data_array)
         print("Data Array multiplied by grid_cell_area")
     # Review cases that work for fractions
     else:
@@ -760,6 +769,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             latitude=latitude,
             subplot_title=figure_label,
             units=units,
+            cbarmac=figure_data["cbarmac"],
         )
 
         # Plot the time series of burned area for GFED and ModelE
