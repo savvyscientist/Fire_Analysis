@@ -482,7 +482,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
 def define_subplot(
     fig,
     ax,
-    data,
+    decade_data,
     lons,
     lats,
     cmap,
@@ -524,7 +524,7 @@ def define_subplot(
 
     # Handling difference normalization (if is_diff is true)
     if is_diff:
-        data_min, data_max = data.min(), data.max()
+        data_min, data_max = decade_data.min(), decade_data.max()
         print(data_min, data_max)
         if data_min == data_max:
             norm = mcolors.Normalize(vmin=data_min - 1, vmax=data_max + 1)
@@ -534,7 +534,7 @@ def define_subplot(
         p = ax.pcolormesh(
             lons,
             lats,
-            data,
+            decade_data,
             transform=ccrs.PlateCarree(),
             cmap=cmap,
             norm=norm,
@@ -551,7 +551,7 @@ def define_subplot(
         p = ax.pcolormesh(
             lons,
             lats,
-            data,
+            decade_data,
             transform=ccrs.PlateCarree(),
             cmap=cmap,
             norm=norm,
@@ -570,7 +570,7 @@ def map_plot(
     axis,
     axis_length,
     axis_index,
-    decade_mean_data,
+    decade_data,
     longitude,
     latitude,
     subplot_title,
@@ -589,7 +589,7 @@ def map_plot(
     define_subplot(
         figure,
         axis_value,
-        decade_mean_data,
+        decade_data,
         longitude,
         latitude,
         cmap="jet",
@@ -600,7 +600,7 @@ def map_plot(
         fontsize=10,
         title=subplot_title,
         clabel=units,
-        masx=0.7 * decade_mean_data.max(),
+        masx=0.7 * decade_data.max(),
         is_diff=False,
     )
 
@@ -661,7 +661,6 @@ def obtain_time_series_xarray(
 
     time_dimension = total_value.dims[0]
     sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
-    print(total_value.dims)
     # Calculate the mean burned area over the decade
     time_mean_data = total_value.mean(dim=time_dimension)
 
@@ -691,11 +690,10 @@ def obtain_time_series_xarray(
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
         grid_cell_area = calculate_grid_area(grid_area_shape=grid_cell_dimension_shape)
         total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
-        print(total_data_array.round(2))
+        print("Data Array multiplied by grid_cell_area")
     # Review cases that work for fractions
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
-    print("Data Array multiplied by grid_cell_area")
 
     start_year = int(total_value.coords["time"].values[0])
     end_year = int(total_value.coords["time"].values[-1])
@@ -757,7 +755,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             axis=map_axis,
             axis_length=axis_length,
             axis_index=index,
-            decade_mean_data=time_mean_data,
+            decade_data=time_mean_data,
             longitude=longitude,
             latitude=latitude,
             subplot_title=figure_label,
@@ -773,7 +771,6 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             color=figure_data["color"],
             label=figure_label,
         )
-        print(end_year, start_year)
         global_year_max = (
             int(end_year)
             if int(global_year_max) < int(end_year)
