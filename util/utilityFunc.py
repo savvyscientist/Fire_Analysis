@@ -656,6 +656,8 @@ def obtain_time_series_xarray(
     ):
         # Calculate the lat-lon total over the climatological period
         total_data_array = total_value.sum(dim=sum_dimension).values
+        # Convert m^2 to Mha
+        total_data_array *= m2toMha
     elif (
         "m-2".lower() 
         or "m^-2".lower() in units

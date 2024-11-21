@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 EARTH_RADIUS = 6371000
 KM_NEG_2TOM_NEG_2 = 10**-6
 KM_TO_METERS = 10**6
+m2toMha = 1e.-10 # 1m^2 = 10-6 km^2 = 10-4 ha = 10-10 Mha
 DAYS_TO_SECONDS = 60 * 60 * 24
 SCRIPTS_ENV_VARIABLES = "utilityEnvVar.json"
 MONTHLIST = [
