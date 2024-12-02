@@ -1,8 +1,10 @@
-from os import listdir
-import os
-from os.path import join, isfile
+import traceback
+import rasterio
+from os import listdir, makedirs, remove
+from os.path import isfile, join, basename, exists, dirname
 import re
-import warnings
+from rasterio.transform import from_origin
+import rioxarray as riox
 import numpy as np
 import netCDF4 as nc
 import matplotlib.pyplot as plt
@@ -17,8 +19,10 @@ import h5py
 import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from netCDF4 import Dataset
 
 from utilityGlobal import (
+    M2TOMHA,
     SCRIPTS_ENV_VARIABLES,
     MONTHLIST,
     DISTINCT_COLORS,
@@ -62,179 +66,6 @@ def extract_scaling_factor(units):
         return 1.0, units  # Default scaling factor is 1 if not specified
 
 
-######################################################
-#                    TIME ANALYSIS                   #
-######################################################
-def plotTimeAnalysis(
-    data_set,
-    directory_path,
-    year_start,
-    year_end,
-    species,
-    legend_array,
-    color_array,
-    figure_size,
-):
-    # iterate over species in the species list
-    for species_element in species:
-        # create the matplotlib figure
-        plt.figure(figsize=figure_size)
-        # plot values
-        for legend_index, legend in enumerate(legend_array):
-            plt.plot(
-                MONTHLIST,
-                data_set[legend_index, :],
-                label=legend,
-                marker=MARKER,
-                color=color_array[legend_index],
-            )
-        # include various metadata for the created plot
-        plt.title(f"{species_element} Emissions by Sector ({year_start} - {year_end})")
-        plt.xlabel("Month")
-        plt.ylabel(f"{species_element} Emissions [Pg]")
-        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(
-            f"{directory_path}/plots/fire_repository/Develpment/{species_element}_emissions_by_sector.eps"
-        )
-
-
-def executeTimeAnalysis(
-    file_path,
-    species,
-    sectors,
-    simulations,
-    directory_path,
-    area_variable_name,
-):
-    # obtain the dataset earth surface area data
-    time_netcdf_dataset = nc.Dataset(file_path, "r")
-    dataset_area = time_netcdf_dataset.variables[area_variable_name]
-    dataset_earth_surface_area = np.sum(dataset_area)
-    # This script plots a time series of one year of data (seasonality)
-    # of specified emissions sources from two simulations and also calculates
-    # the difference between the two
-    dest_data = np.zeros((len(sectors) * len(simulations), NUM_MONTHS))
-    for species_element in species:
-        for month_index, month in enumerate(MONTHLIST):
-            row_index = 0
-            for simulation_element in simulations:
-                # Construct file name
-                filename = f"{directory_path}/{species_element}/{month}_1996.taij{simulation_element}.nc"
-                try:
-                    parseDataset = nc.Dataset(filename, "r")
-                    for sector in enumerate(sectors):
-                        if (
-                            sector != "pyrE_src_hemis"
-                            and simulation_element != "E6TomaF40intpyrEtest2"
-                        ):
-                            var_name = f"{species_element}_{sector}"
-                            hemisphere_value = parseDataset.variables[var_name]
-                            global_val = hemisphere_value[2,]
-                            dest_data[row_index, month_index] = (
-                                global_val
-                                * dataset_earth_surface_area
-                                * SECONDS_IN_A_YEAR
-                                * KILOGRAMS_TO_GRAMS
-                            )
-                            row_index += 1
-                    parseDataset.close()
-                except FileNotFoundError:
-                    print(f"File {filename} not found.")
-                except Exception as e:
-                    print(f"Error reading from {filename}: {str(e)}")
-            dest_data[-1, month_index] = (
-                dest_data[0, month_index] + dest_data[1, month_index]
-            )
-    return dest_data
-
-
-def timeAnalysisRunner(
-    file_path,
-    species,
-    sectors,
-    simulations,
-    directory_path,
-    area_variable_name,
-    year_start,
-    year_end,
-    legend_array,
-    color_array,
-    figure_size,
-):
-    data_set = executeTimeAnalysis(
-        file_path,
-        species,
-        sectors,
-        simulations,
-        directory_path,
-        area_variable_name,
-    )
-    plotTimeAnalysis(
-        data_set,
-        directory_path,
-        year_start,
-        year_end,
-        species,
-        legend_array,
-        color_array,
-        figure_size,
-    )
-
-
-def time_series_plot(
-    axis,
-    data,
-    marker,
-    line_style,
-    color,
-    label,
-    grid_visible=True,
-):
-    """
-    Plots the total burned area as a function of year for both GFED and ModelE data.
-
-    Parameters:
-    gfed4sba_per_year (np.ndarray): A 2D array with columns (year, totalBA), where totalBA is the sum of burned area for that year.
-    modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the sum of burned area for that year.
-    """
-
-    # try:
-    # Extract years and total burned area for both GFED and ModelE
-    years_data = data[:, 0]
-    total_data = data[:, 1]
-
-    # Plot the time series of total burned area for both GFED and ModelE
-    axis.plot(
-        years_data,
-        total_data,
-        marker=marker,
-        linestyle=line_style,
-        color=color,
-        label=label,
-    )
-    axis.legend()
-    axis.grid(grid_visible)
-    # except:
-    #     print("title, xlabel...etc already set")
-
-
-def obtain_netcdf_files(dir_path) -> list:
-    """
-    loops through files in the current director and returns a list of files that are netcdf files
-
-    :param dir_path: the file path
-    :return: all files in the "dir_path" that are netcdf files
-    """
-    return [
-        join(dir_path, file)
-        for file in listdir(dir_path)
-        if isfile(join(dir_path, file))
-        and (file.split(".")[-1] == "hdf5" or file.split(".")[-1] == "nc")
-    ]
-
-
 def calculate_grid_area(grid_area_shape, units="km"):
     # Grid resolution
     nlat = grid_area_shape[0]  # Number of latitude bands
@@ -274,6 +105,135 @@ def calculate_grid_area(grid_area_shape, units="km"):
     return grid_area
 
 
+def obtain_netcdf_files(dir_path) -> list:
+    """
+    loops through files in the current director and returns a list of files that are netcdf files
+
+    :param dir_path: the file path
+    :return: all files in the "dir_path" that are netcdf files
+    """
+    return [
+        join(dir_path, file)
+        for file in listdir(dir_path)
+        if isfile(join(dir_path, file))
+        and (file.split(".")[-1] == "hdf5" or file.split(".")[-1] == "nc")
+    ]
+
+
+def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
+    """
+    Reads multiple HDF5 files using h5py, calculates the annual burned area,
+    and returns the data as xarray.DataArray.
+    """
+    time_array = [2001]
+    yearly_data = []
+    attribute_dict = {}
+    annual_burned_fraction = np.zeros(shape=(shape))
+    for file in files:
+        with Dataset(file) as netcdf_dataset:
+            # dataset containing all xarray data array (used to create the final netcdf file)
+            match variable_name:
+                # calculates the Nat array
+                case "Nat":
+                    # transform the arrays dimensions to (720, 1440) and convert (km^2 -> m^2)
+                    # obtain all needed data array
+                    var_total_data_array = netcdf_dataset.variables["Total"][:][0]
+                    var_crop_data_array = netcdf_dataset.variables["Crop"][:][0]
+                    var_defo_data_array = netcdf_dataset.variables["Defo"][:][0]
+                    var_peat_data_array = netcdf_dataset.variables["Peat"][:][0]
+                    # calculate the Nat numpy array
+                    # equation: Total - (Crop + Defo + Peat)
+                    var_data_array = var_total_data_array - (
+                        var_crop_data_array + var_defo_data_array + var_peat_data_array
+                    )
+                # base case
+                case _:
+                    print("TOTAL VARIABLE")
+                    # obtain the variables in the netcdf_dataset
+                    # dimensions (1, 720, 1440)
+                    var_total_data_array = netcdf_dataset.variables["Total"][:]
+                    var_crop_data_array = netcdf_dataset.variables["Crop"][:]
+                    var_defo_data_array = netcdf_dataset.variables["Defo"][:]
+                    var_peat_data_array = netcdf_dataset.variables["Peat"][:]
+
+                    # obtain the numpy array for each netcdf variable
+                    # transform the arrays dimensions to (720, 1440) and convert the metric to km^2 -> m^2
+                    var_data_array = (
+                        var_total_data_array
+                        - var_peat_data_array
+                        - var_crop_data_array
+                        - var_defo_data_array
+                    )
+
+            var_data_array = (
+                var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
+            )
+            annual_burned_fraction += var_data_array
+
+            # Copy attributes of the burned area fraction
+            for attr_name in netcdf_dataset.variables["Total"].ncattrs():
+                attribute_dict[attr_name] = getattr(
+                    netcdf_dataset.variables["Total"], attr_name
+                )
+
+            # update the units to match the upscaling process
+            attribute_dict["units"] = "m^2"
+
+            # obtain the height and width from the upscale shape
+            # create an evenly spaced array representing the longitude and the latitude
+            print(var_data_array.shape)
+            height, width = var_data_array.shape
+            latitudes = np.linspace(-90, 90, height)
+            longitudes = np.linspace(-180, 180, width)
+            year = int(file.split("\\")[-1][2:6])
+
+            if len(time_array) and year != time_array[-1]:
+                print(year)
+                yearly_data.append(annual_burned_fraction)
+                time_array.append(year)
+                annual_burned_fraction = np.zeros(shape=shape)
+
+            # flip the data matrix (upside down due to the GFED dataset's orientation)
+            # burned_fraction_upscaled = np.flip(burned_fraction_upscaled, 0)
+
+            # create the xarray data array for the upscaled burned area and add it to the dictionary
+
+    # height, width = yearly_data[0].shape
+    #     time_array.append(year)
+    if len(yearly_data) < len(time_array):
+        yearly_data.append(annual_burned_fraction)
+
+    print(len(yearly_data))
+    print(time_array)
+    latitudes = np.linspace(-90, 90, shape[-2])
+    longitudes = np.linspace(-180, 180, shape[-1])
+    total_data_array = (
+        xr.DataArray(
+            yearly_data,
+            coords={
+                "time": np.array(time_array),
+                "latitude": latitudes,
+                "longitude": longitudes,
+            },
+            dims=["time", "latitude", "longitude"],
+            attrs=attribute_dict,
+        )
+        if upscaled
+        else xr.DataArray(
+            yearly_data,
+            coords={
+                "time": np.array(time_array),
+                "latitude": latitudes,
+                "longitude": longitudes,
+            },
+            dims=["time", "latitude", "longitude"],
+            attrs=attribute_dict,
+        )
+    )
+
+    return total_data_array, longitudes, latitudes
+
+
 def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
     """
     Reads multiple HDF5 files using h5py, calculates the annual burned area,
@@ -307,10 +267,11 @@ def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
                 # Access grid_cell_area using the method suggested
                 grid_cell_area = h5file["ancill"]["grid_cell_area"][:]
                 # Calculate total burned area
-                total_burned_area = annual_burned_fraction * grid_cell_area
+                total_burned_area = annual_burned_fraction / grid_cell_area
             else:
                 total_burned_area = annual_burned_fraction
             burned_fraction_list.append(total_burned_area)
+        # print(file_path.split("_"), file_path.split("_")[1].split(".")[0])
         year = (
             file_path.split("_")[1].split(".")[0]
             if not upscaled
@@ -421,7 +382,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             #     density_variable_data > 0.0, 0.0
             # )
             time_data_array = netcdf_dataset.variables["time"][:]
-
             # print(netcdf_dataset.variables["time"])
 
             # Copy attributes of the burned area fraction
@@ -441,8 +401,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
-                    var_data_array = (density_variable_data[month]) / (DAYS_TO_SECONDS)
-                attribute_dict["units"] = "lightning strikes/m-2/s"
+                    var_data_array = density_variable_data[month] / DAYS_TO_SECONDS
                 variable_data = variable_data + var_data_array
                 if (year) < (current_year):
                     year = current_year
@@ -452,6 +411,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 # print(f"Current Month {month}: ", var_data_array.sum())
                 updated_var_data_array.append(var_data_array)
 
+            attribute_dict["units"] = "lightning strikes/m-2/year"
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
             longitudes = np.linspace(-180, 180, density_variable.shape[-1])
             # creates the data array and saves it to a file
@@ -466,8 +426,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 attrs=attribute_dict,
             )
 
-            latitudes = np.linspace(-90, 90, density_variable.shape[-2])
-            longitudes = np.linspace(-180, 180, density_variable.shape[-1])
             yearly_var_data_array_xarray = xr.DataArray(
                 (yearly_var_data_array),
                 coords={
@@ -477,6 +435,12 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 },
                 dims=["time", "latitude", "longitude"],
                 attrs=attribute_dict,
+            )
+            var_data_array_xarray = var_data_array_xarray.where(
+                var_data_array_xarray > 0.0, 0.0
+            )
+            yearly_var_data_array_xarray = yearly_var_data_array_xarray.where(
+                yearly_var_data_array_xarray > 0.0, 0.0
             )
 
             return (
@@ -533,7 +497,6 @@ def define_subplot(
     # Handling difference normalization (if is_diff is true)
     if is_diff:
         data_min, data_max = decade_data.min(), decade_data.max()
-        print(data_min, data_max)
         if data_min == data_max:
             norm = mcolors.Normalize(vmin=data_min - 1, vmax=data_max + 1)
         else:
@@ -584,6 +547,7 @@ def map_plot(
     subplot_title,
     units,
     cbarmac,
+    is_diff=False,
 ):
     """
     Plots the decadal mean burned area of both GFED and ModelE side by side.
@@ -592,6 +556,7 @@ def map_plot(
     decade_mean_gfed4sba (xarray.DataArray): The decadal mean burned area (lat, lon array).
     decade_mean_modelEba (xarray.DataArray): The decadal mean burned area from ModelE(lat, lon array).
     """
+    print(axis_index, axis_length)
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
     # GFED4s decadal mean map
@@ -610,26 +575,73 @@ def map_plot(
         title=subplot_title,
         clabel=units,
         masx=cbarmac,
-        is_diff=False,
+        is_diff=is_diff,
     )
+
+
+def time_series_plot(
+    axis,
+    data,
+    marker,
+    line_style,
+    color,
+    label,
+    grid_visible=True,
+):
+    """
+    Plots the total burned area as a function of year for both GFED and ModelE data.
+
+    Parameters:
+    gfed4sba_per_year (np.ndarray): A 2D array with columns (year, totalBA), where totalBA is the sum of burned area for that year.
+    modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the sum of burned area for that year.
+    """
+
+    # try:
+    # Extract years and total burned area for both GFED and ModelE
+    years_data = data[:, 0]
+    total_data = data[:, 1]
+
+    # Plot the time series of total burned area for both GFED and ModelE
+    axis.plot(
+        years_data,
+        total_data,
+        marker=marker,
+        linestyle=line_style,
+        color=color,
+        label=label,
+    )
+    axis.legend()
+    axis.grid(grid_visible)
+    # except:
+    #     print("title, xlabel...etc already set")
 
 
 def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
     match (NetCDF_Type):
-        case "BA":
+        case "BA_GFED4":
             total_value, longitude, latitude = read_gfed4s(
                 files=file_paths, upscaled=False
             )
-        case "BA_upscale":
+        case "BA_GFED4_upscale":
             total_value, longitude, latitude = read_gfed4s(
                 files=file_paths, upscaled=True, shape=(90, 144)
+            )
+        case "BA_GFED5":
+            total_value, longitude, latitude = read_gfed5(
+                files=file_paths, shape=(720, 1440), upscaled=False
+            )
+        case "BA_GFED5_upscale":
+            total_value, longitude, latitude = read_gfed5(
+                files=file_paths, shape=(90, 144), upscaled=True
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
                 files=file_paths, variables=variables, lightning=True
             )
         case "lightning":
-            total_value, longitude, latitude = read_lightning_data(files=file_paths)
+            total_value, longitude, latitude = read_lightning_data(
+                files=file_paths, upscaled=False
+            )
         case "lightning_upscale":
             total_value, longitude, latitude = read_lightning_data(
                 files=file_paths, upscaled=True
@@ -693,17 +705,19 @@ def obtain_time_series_xarray(
     if "m2" in units.lower() or "m^2".lower() in units:
         # Calculate the lat-lon total over the climatological period
         total_data_array = total_value.sum(dim=sum_dimensions).values
+        # Convert m^2 to mega hectors
+        total_data_array = total_data_array
     elif "m-2".lower() or "m^-2".lower() in units:
         # Calculate the lat-lon total over the climatological period
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
         grid_cell_area = calculate_grid_area(grid_area_shape=grid_cell_dimension_shape)
         total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
-        print(total_data_array)
         print("Data Array multiplied by grid_cell_area")
     # Review cases that work for fractions
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
 
+    print(total_data_array)
     start_year = int(total_value.coords["time"].values[0])
     end_year = int(total_value.coords["time"].values[-1])
     years = np.arange(start_year, end_year + 1)
@@ -792,9 +806,115 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             else int(global_year_min)
         )
 
+    (
+        (time_mean_data_diff),
+        (data_per_year_stack_diff),
+        longitude_diff,
+        latitude_diff,
+        units_diff,
+        start_year_diff,
+        end_year_diff,
+        figure_label_diff,
+    ) = run_time_series_diff_analysis(folder_data_list[0], folder_data_list[1])
+
+    # map_plot(
+    #     figure=map_figure,
+    #     axis=map_axis,
+    #     axis_length=1,
+    #     axis_index=0,
+    #     decade_data=time_mean_data_diff,
+    #     longitude=longitude_diff,
+    #     latitude=latitude_diff,
+    #     subplot_title=figure_label_diff,
+    #     units=units_diff,
+    #     cbarmac=None,
+    #     is_diff=True,
+    # )
+
+    time_series_plot(
+        axis=time_analysis_axis,
+        data=data_per_year_stack_diff,
+        marker="o",
+        line_style="-",
+        color="r",
+        label=figure_label_diff,
+    )
+
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
     time_analysis_axis.set_xlabel(
         f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
     )
     time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
     plt.show()
+
+
+def run_time_series_diff_analysis(folder_data_one, folder_data_two):
+    folder_path_one, figure_data_one, file_type_one, variables_one = (
+        folder_data_one["folder_path"],
+        folder_data_one["figure_data"],
+        folder_data_one["file_type"],
+        folder_data_one["variables"],
+    )
+
+    folder_path_two, figure_data_two, file_type_two, variables_two = (
+        folder_data_two["folder_path"],
+        folder_data_two["figure_data"],
+        folder_data_two["file_type"],
+        folder_data_two["variables"],
+    )
+
+    # Call intann_BA_xarray to calculate decadal mean BA and interannual variability
+    (
+        time_mean_data_one,
+        data_per_year_stack_one,
+        longitude_one,
+        latitude_one,
+        units_one,
+        start_year_one,
+        end_year_one,
+    ) = obtain_time_series_xarray(
+        NetCDF_folder_Path=folder_path_one,
+        NetCDF_Type=file_type_one,
+        variables=variables_one,
+    )
+
+    (
+        time_mean_data_two,
+        data_per_year_stack_two,
+        longitude_two,
+        latitude_two,
+        units_two,
+        start_year_two,
+        end_year_two,
+    ) = obtain_time_series_xarray(
+        NetCDF_folder_Path=folder_path_two,
+        NetCDF_Type=file_type_two,
+        variables=variables_two,
+    )
+    # print(time_mean_data_one.values)
+    # print(time_mean_data_two.values)
+    # print(data_per_year_stack_two - data_per_year_stack_one)
+    print(time_mean_data_one.values.sum())
+    print(time_mean_data_two.values.sum())
+    print(len(data_per_year_stack_two))
+    print(len(data_per_year_stack_one[:18]))
+    time_mean_data_one.values = time_mean_data_one.values - time_mean_data_two.values
+    data_per_year_stack_diff = data_per_year_stack_two[:18] - data_per_year_stack_one
+    min_year = min(
+        data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
+    )
+
+    for index in range(0, len(data_per_year_stack_diff)):
+        data_per_year_stack_diff[index][0] += min_year + index
+
+    return (
+        (time_mean_data_one),
+        (data_per_year_stack_diff),
+        longitude_one,
+        latitude_one,
+        units_one,
+        start_year_one,
+        end_year_one,
+        f"{figure_data_one['label']} - {figure_data_two['label']}",
+    )
+    pass

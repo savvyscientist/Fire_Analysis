@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-
+M2TOMHA = 1e-10  # 1m^2 = 10-6 km^2 = 10-4 ha = 10-10 Mha
 EARTH_RADIUS_METERS = 6378000
 EARTH_RADIUS_KM = 6378
 KM_NEG_2TOM_NEG_2 = 10**-6

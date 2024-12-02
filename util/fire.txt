@@ -1,0 +1,24 @@
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE Lightning Area",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/upscale",
+        "file_type": "lightning_upscale",
+        "variables": [],
+        "figure_data": {
+          "color": "b",
+          "marker": "o",
+          "line_style": "-",
+          "label": "WGLC Lightning Data",
+          "cbarmac": null
+        }
+      }

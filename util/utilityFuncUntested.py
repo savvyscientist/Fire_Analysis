@@ -40,6 +40,164 @@ from utilityGlobal import (
 
 
 ######################################################
+#                    TIME ANALYSIS                   #
+######################################################
+def plotTimeAnalysis(
+    data_set,
+    directory_path,
+    year_start,
+    year_end,
+    species,
+    legend_array,
+    color_array,
+    figure_size,
+):
+    # iterate over species in the species list
+    for species_element in species:
+        # create the matplotlib figure
+        plt.figure(figsize=figure_size)
+        # plot values
+        for legend_index, legend in enumerate(legend_array):
+            plt.plot(
+                MONTHLIST,
+                data_set[legend_index, :],
+                label=legend,
+                marker=MARKER,
+                color=color_array[legend_index],
+            )
+        # include various metadata for the created plot
+        plt.title(f"{species_element} Emissions by Sector ({year_start} - {year_end})")
+        plt.xlabel("Month")
+        plt.ylabel(f"{species_element} Emissions [Pg]")
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(
+            f"{directory_path}/plots/fire_repository/Develpment/{species_element}_emissions_by_sector.eps"
+        )
+
+
+def executeTimeAnalysis(
+    file_path,
+    species,
+    sectors,
+    simulations,
+    directory_path,
+    area_variable_name,
+):
+    # obtain the dataset earth surface area data
+    time_netcdf_dataset = nc.Dataset(file_path, "r")
+    dataset_area = time_netcdf_dataset.variables[area_variable_name]
+    dataset_earth_surface_area = np.sum(dataset_area)
+    # This script plots a time series of one year of data (seasonality)
+    # of specified emissions sources from two simulations and also calculates
+    # the difference between the two
+    dest_data = np.zeros((len(sectors) * len(simulations), NUM_MONTHS))
+    for species_element in species:
+        for month_index, month in enumerate(MONTHLIST):
+            row_index = 0
+            for simulation_element in simulations:
+                # Construct file name
+                filename = f"{directory_path}/{species_element}/{month}_1996.taij{simulation_element}.nc"
+                try:
+                    parseDataset = nc.Dataset(filename, "r")
+                    for sector in enumerate(sectors):
+                        if (
+                            sector != "pyrE_src_hemis"
+                            and simulation_element != "E6TomaF40intpyrEtest2"
+                        ):
+                            var_name = f"{species_element}_{sector}"
+                            hemisphere_value = parseDataset.variables[var_name]
+                            global_val = hemisphere_value[2,]
+                            dest_data[row_index, month_index] = (
+                                global_val
+                                * dataset_earth_surface_area
+                                * SECONDS_IN_A_YEAR
+                                * KILOGRAMS_TO_GRAMS
+                            )
+                            row_index += 1
+                    parseDataset.close()
+                except FileNotFoundError:
+                    print(f"File {filename} not found.")
+                except Exception as e:
+                    print(f"Error reading from {filename}: {str(e)}")
+            dest_data[-1, month_index] = (
+                dest_data[0, month_index] + dest_data[1, month_index]
+            )
+    return dest_data
+
+
+def timeAnalysisRunner(
+    file_path,
+    species,
+    sectors,
+    simulations,
+    directory_path,
+    area_variable_name,
+    year_start,
+    year_end,
+    legend_array,
+    color_array,
+    figure_size,
+):
+    data_set = executeTimeAnalysis(
+        file_path,
+        species,
+        sectors,
+        simulations,
+        directory_path,
+        area_variable_name,
+    )
+    plotTimeAnalysis(
+        data_set,
+        directory_path,
+        year_start,
+        year_end,
+        species,
+        legend_array,
+        color_array,
+        figure_size,
+    )
+
+
+def time_series_plot(
+    axis,
+    data,
+    marker,
+    line_style,
+    color,
+    label,
+    grid_visible=True,
+):
+    """
+    Plots the total burned area as a function of year for both GFED and ModelE data.
+
+    Parameters:
+    gfed4sba_per_year (np.ndarray): A 2D array with columns (year, totalBA), where totalBA is the sum of burned area for that year.
+    modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the sum of burned area for that year.
+    """
+
+    # try:
+    # Extract years and total burned area for both GFED and ModelE
+    years_data = data[:, 0]
+    total_data = data[:, 1]
+
+    # Plot the time series of total burned area for both GFED and ModelE
+    axis.plot(
+        years_data,
+        total_data,
+        marker=marker,
+        linestyle=line_style,
+        color=color,
+        label=label,
+    )
+    axis.legend()
+    axis.grid(grid_visible)
+    # except:
+    #     print("title, xlabel...etc already set")
+
+
+######################################################
 #                    PANELS                          #
 ######################################################
 def plotPanel(output_directory):

@@ -2,32 +2,32 @@
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
     "time_analysis_figure_data": {
-      "title": "Fire Data",
+      "title": "Burned Area Data",
       "xlabel": "Yearly",
-      "ylabel": "Burned Areas"
+      "ylabel": "Burned Area m^2"
     },
     "folders": [
       {
-        "folder_path": "./data/GFED4",
-        "file_type": "BA",
-        "variables": [],
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
         "figure_data": {
-          "color": "r",
-          "marker": "o",
+          "color": "g",
+          "marker": "x",
           "line_style": "-",
-          "label": "Burned Area GFED4 Data",
+          "label": "ModelE Burned Area (BA_tree + BA_shrub + BA_grass) Data",
           "cbarmac": null
         }
       },
       {
         "folder_path": "./data/GFED4_upscaled",
-        "file_type": "BA_upscale",
+        "file_type": "BA_GFED4_upscale",
         "variables": [],
         "figure_data": {
-          "color": "y",
+          "color": "b",
           "marker": "o",
           "line_style": "-",
-          "label": "Burned Area GFED4 Upscale Data",
+          "label": "GFED4 Upscaled Data",
           "cbarmac": null
         }
       }

@@ -16,7 +16,7 @@
           "marker": "o",
           "line_style": "-",
           "label": "Lighting Data Upscale",
-          "cbarmac": 40
+          "cbarmac": null
         }
       },
       {
@@ -28,7 +28,7 @@
           "marker": "o",
           "line_style": "-",
           "label": "Lighting Data",
-          "cbarmac": 40
+          "cbarmac": null
         }
       },
       {
