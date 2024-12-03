@@ -323,6 +323,11 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
     datasets = []
     zero_mat = np.zeros((90, 144), dtype=float)
 
+    #Goal: calculate annual total instead of ANN files
+    #for loop over years available within file_path (e.g. there are monthly files JAN2000-DEC2012)
+    # so years are 2000-2012
+    #for loop over JAN-DEC
+
     # Loop over each file and process it
     for file_path in files:
         # print(file_path)
