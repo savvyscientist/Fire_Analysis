@@ -10,24 +10,36 @@
       {
         "folder_path": "./data/ModelE",
         "file_type": "ModelE",
-        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
+        "variables": ["CtoG"],
         "figure_data": {
           "color": "g",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE Burned Area (BA_tree + BA_shrub + BA_grass) Data",
+          "label": "ModelE CtoG Lightning Data 1.e+10",
           "cbarmac": null
         }
       },
       {
-        "folder_path": "./data/GFED4_upscaled",
-        "file_type": "BA_GFED4_upscale",
+        "folder_path": "./data/upscale",
+        "file_type": "lightning_upscale",
         "variables": [],
         "figure_data": {
           "color": "b",
           "marker": "o",
           "line_style": "-",
-          "label": "GFED4 Upscaled Data",
+          "label": "WGLC Lightning Data",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "ModelE FLASH Lightning Data 1.e+10",
           "cbarmac": null
         }
       }

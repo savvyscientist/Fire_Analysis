@@ -125,7 +125,7 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
     Reads multiple HDF5 files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
     """
-    time_array = [2001]
+    time_array = [2002]
     yearly_data = []
     attribute_dict = {}
     annual_burned_fraction = np.zeros(shape=(shape))
@@ -148,7 +148,6 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
                     )
                 # base case
                 case _:
-                    print("TOTAL VARIABLE")
                     # obtain the variables in the netcdf_dataset
                     # dimensions (1, 720, 1440)
                     var_total_data_array = netcdf_dataset.variables["Total"][:]
@@ -181,14 +180,12 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
 
             # obtain the height and width from the upscale shape
             # create an evenly spaced array representing the longitude and the latitude
-            print(var_data_array.shape)
             height, width = var_data_array.shape
             latitudes = np.linspace(-90, 90, height)
             longitudes = np.linspace(-180, 180, width)
             year = int(file.split("\\")[-1][2:6])
 
             if len(time_array) and year != time_array[-1]:
-                print(year)
                 yearly_data.append(annual_burned_fraction)
                 time_array.append(year)
                 annual_burned_fraction = np.zeros(shape=shape)
@@ -343,6 +340,8 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
             for attr_name in ds[variable].attrs:
                 attribute_dict[attr_name] = getattr(ds[variable], attr_name)
 
+            modelE_var_data *= SECONDS_IN_A_YEAR
+
         # Add a time coordinate based on the year from the file name
         year = int(file_path.split("ANN")[1][:4])
         modelE_var_data = modelE_var_data.expand_dims(
@@ -353,10 +352,10 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
         datasets.append(modelE_var_data)
     # Concatenate all datasets along the 'time' dimension
     modelE_all_year = xr.concat(datasets, dim="time")
+    attribute_dict["units"] = "1.e+10 flashes/m2/yr"
     modelE_all_year.attrs = attribute_dict
     modelE_lons = ds["lon"]
     modelE_lats = ds["lat"]
-
     return modelE_all_year, modelE_lons, modelE_lats
 
 
@@ -506,7 +505,7 @@ def define_subplot(
             lats,
             decade_data,
             transform=ccrs.PlateCarree(),
-            cmap='bwr',
+            cmap="bwr",
             norm=norm,
             vmin=0 if not is_diff else None,
             vmax=masx if not is_diff else None,
@@ -523,7 +522,7 @@ def define_subplot(
             lats,
             decade_data,
             transform=ccrs.PlateCarree(),
-            cmap='jet',
+            cmap="jet",
             norm=norm,
             vmin=0 if not is_diff else None,
             vmax=masx if not is_diff else None,
@@ -705,17 +704,20 @@ def obtain_time_series_xarray(
         total_data_array = total_value.sum(dim=sum_dimensions).values
         # Convert m^2 to mega hectors
         total_data_array = total_data_array
+        # print(f"Multiplied the M2TOMHA for {NetCDF_Type}")
     elif "m-2".lower() or "m^-2".lower() in units:
         # Calculate the lat-lon total over the climatological period
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
-        grid_cell_area = calculate_grid_area(grid_area_shape=grid_cell_dimension_shape)
+        grid_cell_area = calculate_grid_area(
+            grid_area_shape=grid_cell_dimension_shape, units="m^2"
+        )
+        time_total_data *= grid_cell_area
         total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
         print("Data Array multiplied by grid_cell_area")
     # Review cases that work for fractions
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
 
-    print(total_data_array)
     start_year = int(total_value.coords["time"].values[0])
     end_year = int(total_value.coords["time"].values[-1])
     years = np.arange(start_year, end_year + 1)
@@ -734,19 +736,19 @@ def obtain_time_series_xarray(
 
 def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
     # Plot side by side maps for GFED and ModelE
-    axis_length = len(folder_data_list)
-    map_figure, map_axis = plt.subplots(
-        nrows=axis_length,
-        ncols=1,
-        figsize=(18, 10),
-        subplot_kw={"projection": ccrs.PlateCarree()},
-    )
     _, time_analysis_axis = plt.subplots(figsize=(10, 6))
 
     global_year_max = 0
     global_year_min = 9999
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
+        map_figure, map_axis = plt.subplots(
+            nrows=1,
+            ncols=1,
+            figsize=(18, 10),
+            subplot_kw={"projection": ccrs.PlateCarree()},
+        )
+
         folder_path, figure_data, file_type, variables = (
             folder_data["folder_path"],
             folder_data["figure_data"],
@@ -774,7 +776,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
         map_plot(
             figure=map_figure,
             axis=map_axis,
-            axis_length=axis_length,
+            axis_length=1,
             axis_index=index,
             decade_data=time_mean_data,
             longitude=longitude,
@@ -804,16 +806,22 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             else int(global_year_min)
         )
 
-    (
-        (time_mean_data_diff),
-        (data_per_year_stack_diff),
-        longitude_diff,
-        latitude_diff,
-        units_diff,
-        start_year_diff,
-        end_year_diff,
-        figure_label_diff,
-    ) = run_time_series_diff_analysis(folder_data_list[0], folder_data_list[1])
+    # map_figure, map_axis = plt.subplots(
+    #     nrows=1,
+    #     ncols=1,
+    #     figsize=(18, 10),
+    #     subplot_kw={"projection": ccrs.PlateCarree()},
+    # )
+    # (
+    #     (time_mean_data_diff),
+    #     (data_per_year_stack_diff),
+    #     longitude_diff,
+    #     latitude_diff,
+    #     units_diff,
+    #     start_year_diff,
+    #     end_year_diff,
+    #     figure_label_diff,
+    # ) = run_time_series_diff_analysis(folder_data_list[0], folder_data_list[1])
 
     # map_plot(
     #     figure=map_figure,
@@ -829,14 +837,14 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
     #     is_diff=True,
     # )
 
-    time_series_plot(
-        axis=time_analysis_axis,
-        data=data_per_year_stack_diff,
-        marker="o",
-        line_style="-",
-        color="r",
-        label=figure_label_diff,
-    )
+    # time_series_plot(
+    #     axis=time_analysis_axis,
+    #     data=data_per_year_stack_diff,
+    #     marker="o",
+    #     line_style="-",
+    #     color="r",
+    #     label=figure_label_diff,
+    # )
 
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
     time_analysis_axis.set_xlabel(
@@ -892,12 +900,8 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     # print(time_mean_data_one.values)
     # print(time_mean_data_two.values)
     # print(data_per_year_stack_two - data_per_year_stack_one)
-    print(time_mean_data_one.values.sum())
-    print(time_mean_data_two.values.sum())
-    print(len(data_per_year_stack_two))
-    print(len(data_per_year_stack_one[:18]))
     time_mean_data_one.values = time_mean_data_one.values - time_mean_data_two.values
-    data_per_year_stack_diff = data_per_year_stack_two[:18] - data_per_year_stack_one
+    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two[:9]
     min_year = min(
         data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
     )
@@ -910,7 +914,7 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         (data_per_year_stack_diff),
         longitude_one,
         latitude_one,
-        units_one,
+        "Burned Area m^2",
         start_year_one,
         end_year_one,
         f"{figure_data_one['label']} - {figure_data_two['label']}",
