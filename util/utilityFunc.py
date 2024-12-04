@@ -304,7 +304,7 @@ def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
     return total_burned_area_all_years, lon, lat
 
 
-def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=False):
+def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False):
     """
     Reads ModelE BA data (BA_tree, BA_shrub, BA_grass) for the given year range, sums them to calculate
     modelE_BA, and returns the annual sum for each year.
@@ -323,17 +323,18 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
     datasets = []
     zero_mat = np.zeros((90, 144), dtype=float)
 
-    #Goal: calculate annual total instead of ANN files
-    #for loop over years available within file_path (e.g. there are monthly files JAN2000-DEC2012)
+    # Goal: calculate annual total instead of ANN files
+    # for loop over years available within file_path (e.g. there are monthly files JAN2000-DEC2012)
     # so years are 2000-2012
-    #for loop over JAN-DEC
-
+    # for loop over JAN-DEC
+    year_dictionary = {}
     # Loop over each file and process it
     for file_path in files:
         # print(file_path)
         ds = xr.open_dataset(file_path)
         attribute_dict = {}
-
+        # Add a time coordinate based on the year from the file name
+        # year = int(file_path.split("ANN")[1][:4])
         modelE_var_data = np.zeros(shape=(90, 144))
         for variable in variables:
             # where function replaces values that do not meet the parameters condition
@@ -347,8 +348,16 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
 
             modelE_var_data *= SECONDS_IN_A_YEAR
 
-        # Add a time coordinate based on the year from the file name
-        year = int(file_path.split("ANN")[1][:4])
+        year = (
+            int(file_path.split(".")[1][-4:])
+            if monthly
+            else int(file_path.split("ANN")[1][:4])
+        )
+        if year in year_dictionary:
+            year_dictionary[year] += modelE_var_data
+        else:
+            year_dictionary[year] = modelE_var_data
+
         modelE_var_data = modelE_var_data.expand_dims(
             time=[year]
         )  # Add time dimension for each year
@@ -356,7 +365,9 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], lightning=
         # Append the processes dataset to the list
         datasets.append(modelE_var_data)
     # Concatenate all datasets along the 'time' dimension
-    modelE_all_year = xr.concat(datasets, dim="time")
+    for year in year_dictionary.keys():
+        year_dictionary[year] = year_dictionary[year].expand_dims(time=[year])
+    modelE_all_year = xr.concat(year_dictionary.values(), dim="time")
     attribute_dict["units"] = "1.e+10 flashes/m2/yr"
     modelE_all_year.attrs = attribute_dict
     modelE_lons = ds["lon"]
@@ -638,7 +649,11 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
-                files=file_paths, variables=variables, lightning=True
+                files=file_paths, variables=variables
+            )
+        case "ModelE_Monthly":
+            total_value, longitude, latitude = read_ModelE(
+                files=file_paths, variables=variables, monthly=True
             )
         case "lightning":
             total_value, longitude, latitude = read_lightning_data(
@@ -723,8 +738,10 @@ def obtain_time_series_xarray(
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
 
+    print(total_value.coords["time"])
     start_year = int(total_value.coords["time"].values[0])
     end_year = int(total_value.coords["time"].values[-1])
+    print(start_year, end_year)
     years = np.arange(start_year, end_year + 1)
     data_per_year_stack = np.column_stack((years, total_data_array))
 
