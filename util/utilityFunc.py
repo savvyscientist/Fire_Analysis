@@ -353,7 +353,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
             modelE_var_data *= SECONDS_IN_A_YEAR
 
         year = (
-            int(file_path.split(".")[1][-4:])
+            int(file_path.split(".")[0][-4:])
             if monthly
             else int(file_path.split("ANN")[1][:4])
         )
