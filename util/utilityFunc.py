@@ -364,6 +364,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
 
         # Append the processes dataset to the list
         datasets.append(modelE_var_data)
+    year_dictionary = dict(sorted(year_dictionary.items()))
     # Concatenate all datasets along the 'time' dimension
     for year in year_dictionary.keys():
         year_dictionary[year] = year_dictionary[year].expand_dims(time=[year])
