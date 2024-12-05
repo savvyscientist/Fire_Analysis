@@ -335,6 +335,10 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         attribute_dict = {}
         # Add a time coordinate based on the year from the file name
         # year = int(file_path.split("ANN")[1][:4])
+        # TO DO: instead of hard codeing the 90,144 in the shape of modelE_var_data 
+        # can you read it from the model file? 
+        # this is important because the next version of the model will be 180x360 so this script
+        # will fail with it.
         modelE_var_data = np.zeros(shape=(90, 144))
         for variable in variables:
             # where function replaces values that do not meet the parameters condition
