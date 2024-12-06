@@ -32,6 +32,8 @@ def load_config() -> Dict:
         'dir_sim': '/discover/nobackup/kmezuman/nk_CCycle_E6obioF40',
         'dir_obs_emis': '/discover/nobackup/projects/giss/prod_input_files/emis/BBURN_ALT/20240517/BBURN_GFED_4s/monthly/NAT',
         'dir_obs_bio': '/discover/nobackup/nkiang/DATA/Vegcov/V2HX2_EntGVSD_v1.1.2_16G_Spawn2020Sa_biomass_agb_2010_ann_pure.nc',
+        'dir_obs_ba': '/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale',
+        'dir_obs_wglc': '/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/regridding/upscale',
         'nlat': 90,
         'nlon': 144,
         'cmap': 'jet',
@@ -191,6 +193,235 @@ def modelE_emis(year: int, config: Dict, months: List[str],
             logging.warning(f"File {filepath} not found. Skipping.")
             
     return ann_sum_pyrE, tot_emis_pyrE
+################################################################
+def modelE_diag(diag, year, config, lons, lats):
+    """
+    Calculate annual sum of ModelE diagnostics from monthly files.
+    For BA, sums BA_tree/shrub/grass components for each month.
+    For non-BA diagnostics, applies area weighting using axyp.
+    
+    Args:
+        diag (str): Diagnostic to process ('BA', 'fireCount', 'CtoG', 'flammability')
+        year (int): Year to process
+        config (dict): Configuration settings
+        lons (np.array): Longitude array
+        lats (np.array): Latitude array
+    
+    Returns:
+        tuple: (annual_sum_array, total_formatted_string)
+    """
+    months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
+              'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    m2toMha = 1E-6  # Convert m² to Mha
+    
+    # Initialize arrays
+    nlat = len(lats)
+    nlon = len(lons)
+    ann_sum = np.zeros((nlat, nlon), dtype=float)
+
+    for month in months:
+        try:
+            monthly_filename = f"{month}{year}.aijnk_CCycle_E6obioF40.nc"
+            filepath = os.path.join(config['dir_sim'],'monthly', monthly_filename)
+            
+            if not os.path.exists(filepath):
+                logging.warning(f"File {filepath} not found. Skipping month.")
+                continue
+                
+            with nc.Dataset(filepath) as f:
+                if diag == 'BA':
+                    # Sum the three BA components for each month
+                    ba_types = ['BA_tree', 'BA_shrub', 'BA_grass']
+                    month_sum = np.zeros((nlat, nlon), dtype=float)
+                    for ba_type in ba_types:
+                        if ba_type in f.variables:
+                            ba_data = f.variables[ba_type][:]
+                            ba_data *= m2toMha  # Convert to Mha
+                            month_sum += ba_data
+                        else:
+                            logging.warning(f"Variable {ba_type} not found in file for {month}")
+                    ann_sum += month_sum
+                else:
+                    # Handle other diagnostics
+                    if diag in f.variables:
+                        axyp = f.variables['axyp'][:]
+                        diag_data = f.variables[diag][:]
+                        units = f.variables[diag].units
+                        scaling_factor, unit = extract_scaling_factor(units)
+                        diag_data *= float(scaling_factor)
+                        # Add monthly value to annual sum
+                        ann_sum += diag_data
+                    else:
+                        logging.warning(f"Variable {diag} not found in file for {month}")
+        
+        except Exception as e:
+            logging.error(f"Error processing {month} {year}: {str(e)}")
+            continue
+    
+    # Calculate total - different handling for BA vs other diagnostics
+    if diag == 'BA':
+        total = np.nansum(ann_sum)  # Simple sum for BA
+    else:
+        # Apply area weighting for non-BA diagnostics
+        total = np.nansum(ann_sum * axyp)  # Area-weighted sum
+        
+    total_formatted = format(total, '.3e')
+    
+    return ann_sum, total_formatted
+
+###############################################################
+def GFED5_BA(year, config, lons, lats):
+    """
+    Read and process monthly GFED5 burned area data.
+    Calculates natural BA as: Total - Deforestation - Cropland - Peatland
+
+    Args:
+        year (int): Year to process
+        config (dict): Configuration settings
+        lons (np.array): Longitude array
+        lats (np.array): Latitude array
+
+    Returns:
+        tuple: (annual_sum_array, total_formatted_string)
+    """
+    # Initialize arrays
+    nlat = len(lats)
+    nlon = len(lons)
+    ann_sum = np.zeros((nlat, nlon), dtype=float)
+    m2toMha = 1E-6  # Convert m² to Mha
+
+    # Process each month
+    for month in range(1, 13):
+        try:
+            # Construct filename (BAYYYYMM.nc)
+            filename = f"BA{year}{month:02d}_90144.nc"
+            filepath = os.path.join(config['dir_obs_ba'], filename)
+
+            if not os.path.exists(filepath):
+                logging.warning(f"File {filepath} not found. Skipping month.")
+                continue
+
+            with nc.Dataset(filepath) as f:
+                # Read each component
+                components = {
+                    'Total': None,
+                    'Defo': None,
+                    'Crop': None,
+                    'Peat': None
+                }
+
+                for comp in components.keys():
+                    if comp in f.variables:
+                        data = f.variables[comp][:]
+                        # Handle missing/fill values if present
+                        if hasattr(f.variables[comp], '_FillValue'):
+                            fill_value = f.variables[comp]._FillValue
+                            data = np.where(data == fill_value, 0, data)
+                        # Handle negative values
+                        data = np.where(data < 0, 0, data)
+                        components[comp] = data
+                    else:
+                        logging.warning(f"Variable {comp} not found in file for {month}")
+                        components[comp] = np.zeros((nlat, nlon))
+
+                # Calculate natural BA
+                month_ba = (components['Total'] -
+                          components['Defo'] -
+                          components['Crop'] -
+                          components['Peat'])
+
+                # Ensure no negative values
+                month_ba = np.where(month_ba < 0, 0, month_ba)
+
+                # Convert units and add to annual sum
+                month_ba *= m2toMha
+                ann_sum += month_ba
+
+        except Exception as e:
+            logging.error(f"Error processing month {month} of {year}: {str(e)}")
+            continue
+
+    # Calculate total
+    total = np.nansum(ann_sum)
+    total_formatted = format(total, '.3e')
+
+    return ann_sum, total_formatted
+
+# Example usage:
+# ba_sum, ba_total = GFED5_BA(2020, config, lons, lats)
+
+###############################################################
+def process_lightning_density(year, config, var_name):
+    """
+    Process lightning stroke density from monthly data.
+    Maps year to correct indices in time dimension (1-144, where 1 is Jan 2013).
+    Converts from strokes/km²/day to strokes/km²/year.
+
+    Args:
+        year (int): Year to process (2013-2020)
+        filepath (str): Path to netCDF file
+        var_name (str): Name of the density variable in the file
+
+    Returns:
+        tuple: (annual_sum_array, total_formatted_string)
+        Returns (None, None) if year is out of range
+    """
+    filename = "wglc_timeseries_30m_90144.nc"
+    filepath = os.path.join(config['dir_obs_wglc'], filename)
+
+    if not os.path.exists(filepath):
+        logging.warning(f"File {filepath} not found. Skipping month.")
+        continue
+
+    # Check valid year range
+    if year < 2013 or year > 2020:
+        logging.error(f"Year {year} out of valid range (2013-2020)")
+        return None, None
+
+    # Calculate time indices for the requested year
+    # Index 1 corresponds to Jan 2013
+    start_idx = (year - 2013) * 12  # Starting index for requested year
+    time_indices = range(start_idx, start_idx + 12)  # 12 months of data
+
+    try:
+        with nc.Dataset(filepath) as f:
+            # Get dimensions
+            lats = f.variables['latitude'][:]
+            lons = f.variables['longitude'][:]
+
+            # Initialize array for annual sum
+            annual_density = np.zeros((len(lats), len(lons)), dtype=float)
+
+            # Process each month
+            for month, time_idx in enumerate(time_indices):
+                # Read density data for the month
+                density = f.variables[var_name][time_idx,:,:]
+
+                # Get number of days in this month
+                ndays = calendar.monthrange(year, month+1)[1]
+
+                # Convert from per day to total for month
+                monthly_total = density * ndays
+
+                # Add to annual sum
+                annual_density += monthly_total
+
+            # Calculate total (optional)
+            total = np.nansum(annual_density)
+            total_formatted = format(total, '.3e')
+
+            return annual_density, total_formatted
+
+    except Exception as e:
+        logging.error(f"Error processing lightning density data: {str(e)}")
+        raise
+
+# Example usage:
+# density_sum, total = process_lightning_density(2015,
+#                                              '/path/to/lightning.nc',
+#                                              'stroke_density')
+
+###############################################################
 
 def GFED4s_emis(year: int, config: Dict, zero_mat: np.ndarray, 
                 s_in_day: float, kgtog: float, axyp: np.ndarray) -> Tuple[np.ndarray, str]:
@@ -569,11 +800,11 @@ def input_eval():
             axyp = f.variables['axyp'][:]
             
         # Process Burned Area data
-        modelE_ba_sum, modelE_ba_tot = modelE_diag('BA', year, config, lons, lats, axyp)
+        modelE_ba_sum, modelE_ba_tot = modelE_diag('BA', year, config, lons, lats)
         gfed_ba_sum, gfed_ba_tot = GFED5_BA(year, config, lons, lats)
 
         # Process Lightning data
-        modelE_ctog_sum, modelE_ctog_tot = modelE_diag('CtoG', year, config, lons, lats, axyp)
+        modelE_ctog_sum, modelE_ctog_tot = modelE_diag('CtoG', year, config, lons, lats)
         light_sum, light_tot = process_lightning_density(year, 
                                                        config['lightning_file'],
                                                        config['lightning_var'])
