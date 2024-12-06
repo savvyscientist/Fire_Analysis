@@ -351,7 +351,7 @@ def GFED5_BA(year, config, lons, lats):
 # ba_sum, ba_total = GFED5_BA(2020, config, lons, lats)
 
 ###############################################################
-def process_lightning_density(year, config, var_name):
+def process_lightning_density(year, config):
     """
     Process lightning stroke density from monthly data.
     Maps year to correct indices in time dimension (1-144, where 1 is Jan 2013).
@@ -370,8 +370,8 @@ def process_lightning_density(year, config, var_name):
     filepath = os.path.join(config['dir_obs_wglc'], filename)
 
     if not os.path.exists(filepath):
-        logging.warning(f"File {filepath} not found. Skipping month.")
-        continue
+        logging.warning(f"File {filepath} not found.")
+        return None, None
 
     # Check valid year range
     if year < 2013 or year > 2020:
@@ -395,7 +395,7 @@ def process_lightning_density(year, config, var_name):
             # Process each month
             for month, time_idx in enumerate(time_indices):
                 # Read density data for the month
-                density = f.variables[var_name][time_idx,:,:]
+                density = f.variables['density'][time_idx,:,:]
 
                 # Get number of days in this month
                 ndays = calendar.monthrange(year, month+1)[1]
@@ -805,9 +805,7 @@ def input_eval():
 
         # Process Lightning data
         modelE_ctog_sum, modelE_ctog_tot = modelE_diag('CtoG', year, config, lons, lats)
-        light_sum, light_tot = process_lightning_density(year, 
-                                                       config['lightning_file'],
-                                                       config['lightning_var'])
+        light_sum, light_tot = process_lightning_density(year, config)
 
         # Calculate differences
         ba_diff = modelE_ba_sum - gfed_ba_sum
@@ -901,7 +899,7 @@ if __name__ == "__main__":
             logging.info("Running tiered experiments")
             tiered_experiments()
         elif len(sys.argv) > 1 and sys.argv[1] == '--eval':
-            logging.info("Running tiered experiments")
+            logging.info("Running driver evaluation")
             input_eval()
         else:
             logging.info("Running standard process")
