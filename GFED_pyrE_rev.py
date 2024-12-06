@@ -549,27 +549,32 @@ def tiered_experiments():
             logging.error(f"Error in tiered experiments for year {year}: {str(e)}")
             continue
 ###########################################################################
-def input_eval(config, lons, lats, axyp):
+def input_eval():
     """
     Evaluate ModelE diagnostics (BA and CtoG) against observational data (GFED5 and lightning).
     Creates 6 plots: ModelE and obs data for each diagnostic, plus their differences.
-
-    Args:
-        config (dict): Configuration dictionary containing paths and settings
-        lons (np.array): Longitude array
-        lats (np.array): Latitude array
-        axyp (np.array): Grid cell areas
     """
+    # Load configuration and initialize
+    config = load_config()
     year = config['iyear']
-
+    
     try:
+        # Load basic grid information from model file
+        veg_filename = f"ANN{year}.aijnk_CCycle_E6obioF40.nc"
+        filepath = os.path.join(config['dir_sim'], 'ANN_aij', veg_filename)
+        
+        with nc.Dataset(filepath) as f:
+            lats = f.variables['lat'][:]
+            lons = f.variables['lon'][:]
+            axyp = f.variables['axyp'][:]
+            
         # Process Burned Area data
         modelE_ba_sum, modelE_ba_tot = modelE_diag('BA', year, config, lons, lats, axyp)
         gfed_ba_sum, gfed_ba_tot = GFED5_BA(year, config, lons, lats)
 
         # Process Lightning data
         modelE_ctog_sum, modelE_ctog_tot = modelE_diag('CtoG', year, config, lons, lats, axyp)
-        light_sum, light_tot = process_lightning_density(year,
+        light_sum, light_tot = process_lightning_density(year, 
                                                        config['lightning_file'],
                                                        config['lightning_var'])
 
@@ -599,6 +604,65 @@ def input_eval(config, lons, lats, axyp):
                       fraction=0.05,
                       pad=0.05,
                       labelpad=5,
+                      fontsize=10,
+                      title=f'GFED5 Burned Area {year}\nTotal: {gfed_ba_tot} [Mha]',
+                      clabel='Burned Area [Mha]',
+                      masx=None)
+
+        # Plot Lightning data
+        define_subplot(fig, axes[1,0], modelE_ctog_sum, lons, lats,
+                      cmap='Blues',
+                      cborientation='horizontal',
+                      fraction=0.05,
+                      pad=0.05,
+                      labelpad=5,
+                      fontsize=10,
+                      title=f'ModelE Lightning {year}\nTotal: {modelE_ctog_tot} [fl km⁻² yr⁻¹]',
+                      clabel='Lightning Density [fl km⁻² yr⁻¹]',
+                      masx=None)
+
+        define_subplot(fig, axes[1,1], light_sum, lons, lats,
+                      cmap='Blues',
+                      cborientation='horizontal',
+                      fraction=0.05,
+                      pad=0.05,
+                      labelpad=5,
+                      fontsize=10,
+                      title=f'Observed Lightning {year}\nTotal: {light_tot} [fl km⁻² yr⁻¹]',
+                      clabel='Lightning Density [fl km⁻² yr⁻¹]',
+                      masx=None)
+
+        # Plot differences
+        define_subplot(fig, axes[2,0], ba_diff, lons, lats,
+                      cmap='RdBu_r',
+                      cborientation='horizontal',
+                      fraction=0.05,
+                      pad=0.05,
+                      labelpad=5,
+                      fontsize=10,
+                      title=f'BA Difference (ModelE - GFED5) {year}',
+                      clabel='Burned Area Difference [Mha]',
+                      masx=None,
+                      is_diff=True)
+
+        define_subplot(fig, axes[2,1], ctog_diff, lons, lats,
+                      cmap='RdBu_r',
+                      cborientation='horizontal',
+                      fraction=0.05,
+                      pad=0.05,
+                      labelpad=5,
+                      fontsize=10,
+                      title=f'Lightning Difference (ModelE - Obs) {year}',
+                      clabel='Lightning Density Difference [fl km⁻² yr⁻¹]',
+                      masx=None,
+                      is_diff=True)
+
+        plt.tight_layout()
+        plt.show()
+
+    except Exception as e:
+        logging.error(f"Error in input evaluation: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     try:
