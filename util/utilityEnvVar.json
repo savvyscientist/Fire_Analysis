@@ -8,14 +8,14 @@
     },
     "folders": [
       {
-        "folder_path": "./data/ModelE_Monthly",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CtoG"],
+        "folder_path": "./data/GFED4",
+        "file_type": "BA_GFED4",
+        "variables": [],
         "figure_data": {
           "color": "g",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE CtoG Lightning Data 1.e+10",
+          "label": "Original GFED4 Burned Area 1.e+10 (720x1440)",
           "cbarmac": null
         }
       }

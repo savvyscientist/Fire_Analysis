@@ -264,11 +264,12 @@ def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
                 # Access grid_cell_area using the method suggested
                 grid_cell_area = h5file["ancill"]["grid_cell_area"][:]
                 # Calculate total burned area
-                total_burned_area = annual_burned_fraction / grid_cell_area
+                total_burned_area = annual_burned_fraction * grid_cell_area
             else:
                 total_burned_area = annual_burned_fraction
             burned_fraction_list.append(total_burned_area)
         # print(file_path.split("_"), file_path.split("_")[1].split(".")[0])
+        # file paths and folders with underscores may effect this year extraction
         year = (
             file_path.split("_")[1].split(".")[0]
             if not upscaled
@@ -335,8 +336,8 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         attribute_dict = {}
         # Add a time coordinate based on the year from the file name
         # year = int(file_path.split("ANN")[1][:4])
-        # TO DO: instead of hard codeing the 90,144 in the shape of modelE_var_data 
-        # can you read it from the model file? 
+        # TO DO: instead of hard codeing the 90,144 in the shape of modelE_var_data
+        # can you read it from the model file?
         # this is important because the next version of the model will be 180x360 so this script
         # will fail with it.
         modelE_var_data = np.zeros(shape=(90, 144))
@@ -538,16 +539,33 @@ def define_subplot(
         # # Create a colormap with white for values <= 0
         # cmap = plt.get_cmap(cmap).copy()
         # cmap.set_bad(color="white")  # Set masked values to white
+        logNorm = mcolors.LogNorm(
+            vmin=1 if not is_diff else None, vmax=masx if not is_diff else None
+        )
         p = ax.pcolormesh(
             lons,
             lats,
             decade_data,
             transform=ccrs.PlateCarree(),
             cmap="jet",
-            norm=norm,
-            vmin=0 if not is_diff else None,
-            vmax=masx if not is_diff else None,
+            norm=logNorm,
+            # vmin=0 if not is_diff else None,
+            # vmax=masx if not is_diff else None,
         )
+        #         print(0 if not is_diff else None, masx if not is_diff else None)
+        # logNorm = colors.LogNorm(
+        #     vmin=0 if not is_diff else None, vmax=masx if not is_diff else None
+        # )
+        # p = ax.pcolormesh(
+        #     lons,
+        #     lats,
+        #     decade_data,
+        #     transform=ccrs.PlateCarree(),
+        #     cmap=cmap,
+        #     norm=logNorm,
+        #     vmin=float(0) if not is_diff else None,
+        #     vmax=float(masx) if not is_diff else None,
+        # )
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
