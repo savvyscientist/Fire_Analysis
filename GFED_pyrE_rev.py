@@ -218,6 +218,7 @@ def modelE_diag(diag, year, config, lons, lats):
     nlat = len(lats)
     nlon = len(lons)
     ann_sum = np.zeros((nlat, nlon), dtype=float)
+    zero_mat = np.zeros((nlat, nlon), dtype=float)
 
     for month in months:
         try:
@@ -248,6 +249,7 @@ def modelE_diag(diag, year, config, lons, lats):
                         diag_data = f.variables[diag][:]
                         units = f.variables[diag].units
                         scaling_factor, unit = extract_scaling_factor(units)
+                        print(diag,scaling_factor,unit)
                         diag_data *= float(scaling_factor)
                         # Add monthly value to annual sum
                         ann_sum += diag_data
@@ -258,6 +260,7 @@ def modelE_diag(diag, year, config, lons, lats):
             logging.error(f"Error processing {month} {year}: {str(e)}")
             continue
     
+    ann_sum = np.where(ann_sum < 0., zero_mat, ann_sum)
     # Calculate total - different handling for BA vs other diagnostics
     if diag == 'BA':
         total = np.nansum(ann_sum)  # Simple sum for BA
@@ -451,8 +454,8 @@ def GFED4s_emis(year: int, config: Dict, zero_mat: np.ndarray,
         raise
 
 def define_subplot(fig, ax, data, lons, lats, cmap, cborientation, fraction, pad,
-                  labelpad, fontsize, title, clabel, masx, is_diff=False, glob=None):
-    """Define the properties of a subplot with optional difference normalization."""
+                  labelpad, fontsize, title, clabel, masx, is_diff=False, glob=None, use_log=False):
+    """Define the properties of a subplot with optional difference normalization and log scale."""
     ax.coastlines(color='black')
     ax.add_feature(cfeature.LAND, edgecolor='gray')
     ax.add_feature(cfeature.OCEAN, facecolor='white', edgecolor='none', zorder=1)
@@ -471,12 +474,17 @@ def define_subplot(fig, ax, data, lons, lats, cmap, cborientation, fraction, pad
         else:
             abs_max = max(abs(0.25 * data_min), abs(0.25 * data_max))
             norm = mcolors.Normalize(vmin=-abs_max, vmax=abs_max)
+        cmap = 'bwr'# Use bwr for difference plots
+    elif use_log:
+        norm = mcolors.LogNorm(vmin=max(1e-10, data[data > 0].min()),
+                               vmax=data.max())
     else:
         norm = None
+        cmap = 'jet' if cmap == 'jet' else cmap# Use jet for non-difference plots unless specified
 
     p = ax.pcolormesh(lons, lats, data, transform=ccrs.PlateCarree(),
                       cmap=cmap, norm=norm,
-                      vmin=0 if not is_diff else None,
+                      vmin=0 if not is_diff and not use_log else None,
                       vmax=masx if not is_diff else None)
                       
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation,
@@ -783,11 +791,13 @@ def tiered_experiments():
 def input_eval():
     """
     Evaluate ModelE diagnostics (BA and CtoG) against observational data (GFED5 and lightning).
-    Creates 6 plots: ModelE and obs data for each diagnostic, plus their differences.
+    Creates 6 plots: Lightning comparisons (top) and BA comparisons (bottom).
     """
     # Load configuration and initialize
     config = load_config()
     year = config['iyear']
+    lyear = 2013 if year < 2013 else year
+    BAcbarmax = 100000
     
     try:
         # Load basic grid information from model file
@@ -799,92 +809,99 @@ def input_eval():
             lons = f.variables['lon'][:]
             axyp = f.variables['axyp'][:]
             
-        # Process Burned Area data
+        # Process data
+        modelE_ctog_sum, modelE_ctog_tot = modelE_diag('CtoG', year, config, lons, lats)
+        light_sum, light_tot = process_lightning_density(lyear, config)
         modelE_ba_sum, modelE_ba_tot = modelE_diag('BA', year, config, lons, lats)
         gfed_ba_sum, gfed_ba_tot = GFED5_BA(year, config, lons, lats)
 
-        # Process Lightning data
-        modelE_ctog_sum, modelE_ctog_tot = modelE_diag('CtoG', year, config, lons, lats)
-        light_sum, light_tot = process_lightning_density(year, config)
+        if any(x is None for x in [modelE_ba_sum, gfed_ba_sum, modelE_ctog_sum, light_sum]):
+            logging.error("One or more datasets returned None")
+            return
 
         # Calculate differences
-        ba_diff = modelE_ba_sum - gfed_ba_sum
         ctog_diff = modelE_ctog_sum - light_sum
+        ba_diff = modelE_ba_sum - gfed_ba_sum
 
-        # Create figure with 6 subplots (3x2)
-        fig, axes = plt.subplots(3, 2, figsize=(15, 20),
-                                subplot_kw={'projection': ccrs.PlateCarree()})
+        # Create figure with 6 subplots (2x3)
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12),
+                                 subplot_kw={'projection': ccrs.PlateCarree()})
 
-        # Plot BA data
-        define_subplot(fig, axes[0,0], modelE_ba_sum, lons, lats,
-                      cmap='YlOrRd',
-                      cborientation='horizontal',
-                      fraction=0.05,
-                      pad=0.05,
-                      labelpad=5,
-                      fontsize=10,
-                      title=f'ModelE Burned Area {year}\nTotal: {modelE_ba_tot} [Mha]',
-                      clabel='Burned Area [Mha]',
-                      masx=None)
+        # First row: Lightning plots
+        define_subplot(fig, axes[0,0], modelE_ctog_sum, lons, lats,
+                       cmap='jet',
+                       cborientation='horizontal',
+                       fraction=0.05,
+                       pad=0.05,
+                       labelpad=5,
+                       fontsize=10,
+                       title=f'ModelE Lightning {year}\nTotal: {modelE_ctog_tot} [fl km⁻² yr⁻¹]',
+                       clabel='Lightning Density [fl km⁻² yr⁻¹]',
+                       masx=None,
+                       use_log=True)
 
-        define_subplot(fig, axes[0,1], gfed_ba_sum, lons, lats,
-                      cmap='YlOrRd',
-                      cborientation='horizontal',
-                      fraction=0.05,
-                      pad=0.05,
-                      labelpad=5,
-                      fontsize=10,
-                      title=f'GFED5 Burned Area {year}\nTotal: {gfed_ba_tot} [Mha]',
-                      clabel='Burned Area [Mha]',
-                      masx=None)
+        define_subplot(fig, axes[0,1], light_sum, lons, lats,
+                       cmap='jet',
+                       cborientation='horizontal',
+                       fraction=0.05,
+                       pad=0.05,
+                       labelpad=5,
+                       fontsize=10,
+                       title=f'Observed Lightning {lyear}\nTotal: {light_tot} [fl km⁻² yr⁻¹]',
+                       clabel='Lightning Density [fl km⁻² yr⁻¹]',
+                       masx=None,
+                       use_log=True)
 
-        # Plot Lightning data
-        define_subplot(fig, axes[1,0], modelE_ctog_sum, lons, lats,
-                      cmap='Blues',
-                      cborientation='horizontal',
-                      fraction=0.05,
-                      pad=0.05,
-                      labelpad=5,
-                      fontsize=10,
-                      title=f'ModelE Lightning {year}\nTotal: {modelE_ctog_tot} [fl km⁻² yr⁻¹]',
-                      clabel='Lightning Density [fl km⁻² yr⁻¹]',
-                      masx=None)
+        define_subplot(fig, axes[0,2], ctog_diff, lons, lats,
+                       cmap='bwr',
+                       cborientation='horizontal',
+                       fraction=0.05,
+                       pad=0.05,
+                       labelpad=5,
+                       fontsize=10,
+                       title=f'Lightning Difference (ModelE - Obs)',
+                       clabel='Lightning Density Difference [fl km⁻² yr⁻¹]',
+                       masx=None,
+                       is_diff=True)
 
-        define_subplot(fig, axes[1,1], light_sum, lons, lats,
-                      cmap='Blues',
-                      cborientation='horizontal',
-                      fraction=0.05,
-                      pad=0.05,
-                      labelpad=5,
-                      fontsize=10,
-                      title=f'Observed Lightning {year}\nTotal: {light_tot} [fl km⁻² yr⁻¹]',
-                      clabel='Lightning Density [fl km⁻² yr⁻¹]',
-                      masx=None)
+        # Second row: Burned Area plots
+        define_subplot(fig, axes[1,0], modelE_ba_sum, lons, lats,
+                       cmap='jet',
+                       cborientation='horizontal',
+                       fraction=0.05,
+                       pad=0.05,
+                       labelpad=5,
+                       fontsize=10,
+                       title=f'ModelE Burned Area {year}\nTotal: {modelE_ba_tot} [Mha]',
+                       clabel='Burned Area [Mha]',
+                       #masx=BAcbarmax,
+                       masx=None,
+                       use_log=True)
 
-        # Plot differences
-        define_subplot(fig, axes[2,0], ba_diff, lons, lats,
-                      cmap='RdBu_r',
-                      cborientation='horizontal',
-                      fraction=0.05,
-                      pad=0.05,
-                      labelpad=5,
-                      fontsize=10,
-                      title=f'BA Difference (ModelE - GFED5) {year}',
-                      clabel='Burned Area Difference [Mha]',
-                      masx=None,
-                      is_diff=True)
+        define_subplot(fig, axes[1,1], gfed_ba_sum, lons, lats,
+                       cmap='jet',
+                       cborientation='horizontal',
+                       fraction=0.05,
+                       pad=0.05,
+                       labelpad=5,
+                       fontsize=10,
+                       title=f'GFED5 Burned Area {year}\nTotal: {gfed_ba_tot} [Mha]',
+                       clabel='Burned Area [Mha]',
+                       #masx=BAcbarmax,
+                       masx=None,
+                       use_log=True)
 
-        define_subplot(fig, axes[2,1], ctog_diff, lons, lats,
-                      cmap='RdBu_r',
-                      cborientation='horizontal',
-                      fraction=0.05,
-                      pad=0.05,
-                      labelpad=5,
-                      fontsize=10,
-                      title=f'Lightning Difference (ModelE - Obs) {year}',
-                      clabel='Lightning Density Difference [fl km⁻² yr⁻¹]',
-                      masx=None,
-                      is_diff=True)
+        define_subplot(fig, axes[1,2], ba_diff, lons, lats,
+                       cmap='bwr',
+                       cborientation='horizontal',
+                       fraction=0.05,
+                       pad=0.05,
+                       labelpad=5,
+                       fontsize=10,
+                       title=f'BA Difference (ModelE - GFED5)',
+                       clabel='Burned Area Difference [Mha]',
+                       masx=None,
+                       is_diff=True)
 
         plt.tight_layout()
         plt.show()
@@ -892,7 +909,6 @@ def input_eval():
     except Exception as e:
         logging.error(f"Error in input evaluation: {str(e)}")
         raise
-
 if __name__ == "__main__":
     try:
         if len(sys.argv) > 1 and sys.argv[1] == '--tiered':
