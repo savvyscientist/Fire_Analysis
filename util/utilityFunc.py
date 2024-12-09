@@ -350,7 +350,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
                 attribute_dict[attr_name] = getattr(ds[variable], attr_name)
 
         year = (
-            int(file_path.split(".")[1][-4:])
+            int(file_path.split(".")[0][-4:])
             if monthly
             else int(file_path.split("ANN")[1][:4])
         )
