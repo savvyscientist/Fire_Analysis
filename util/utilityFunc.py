@@ -121,7 +121,7 @@ def obtain_netcdf_files(dir_path) -> list:
     ]
 
 
-def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
+def read_gfed5(files, upscaled=False, variable_name="Total"):
     """
     Reads multiple HDF5 files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
@@ -129,7 +129,6 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
     time_array = []
     yearly_data = {}
     attribute_dict = {}
-    annual_burned_fraction = np.zeros(shape=(shape))
     for file in files:
         with Dataset(file) as netcdf_dataset:
             # obtain the variables in the netcdf_dataset
@@ -152,7 +151,9 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
                 var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
             )
             # this depends if the shape includes a time dimension
-            monthly_burned_area = var_data_array if upscaled else var_data_array[0]
+            monthly_burned_area = (
+                var_data_array[0] if len(var_data_array.shape) > 2 else var_data_array
+            )
 
             # Copy attributes of the burned area fraction
             for attr_name in netcdf_dataset.variables["Total"].ncattrs():
@@ -165,11 +166,10 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
 
             # obtain the height and width from the upscale shape
             # create an evenly spaced array representing the longitude and the latitude
-            height, width = annual_burned_fraction.shape
+            height, width = monthly_burned_area.shape
             latitudes = np.linspace(-90, 90, height)
             longitudes = np.linspace(-180, 180, width)
             year = int(file.split("\\")[-1][2:6])
-            print(monthly_burned_area.shape)
             total_xarray = xr.DataArray(
                 monthly_burned_area,
                 coords={
@@ -179,6 +179,7 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
                 dims=["latitude", "longitude"],
                 attrs=attribute_dict,
             )
+            print(year)
             if year in yearly_data:
                 yearly_data[year] += total_xarray
             else:
@@ -193,8 +194,6 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
     #     time_array.append(year)
 
     yearly_data = dict(sorted(yearly_data.items()))
-    latitudes = np.linspace(-90, 90, shape[-2])
-    longitudes = np.linspace(-180, 180, shape[-1])
     # make sure the array is a LIST when passing to the xr.DataArray
     total_data_array = (
         xr.DataArray(
@@ -223,7 +222,7 @@ def read_gfed5(files, upscaled=False, shape=(720, 1440), variable_name="Total"):
     return total_data_array, longitudes, latitudes
 
 
-def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
+def read_gfed4s(files, upscaled=False):
     """
     Reads multiple HDF5 files using h5py, calculates the annual burned area,
     and returns the data as xarray.DataArray.
@@ -238,9 +237,14 @@ def read_gfed4s(files, upscaled=False, shape=(720, 1440)):
             # Load lat and lon for constructing the xarray dataset
             lat = h5file["lat"][:]
             lon = h5file["lon"][:]
+            burned_area_variable_shape = (
+                h5file[f"burned_area/01/burned_fraction"].shape
+                if not upscaled
+                else h5file[f"burned_areas_01"].shape
+            )
 
             # Sum burned fraction over all months
-            annual_burned_fraction = np.zeros(shape=shape)
+            annual_burned_fraction = np.zeros(shape=burned_area_variable_shape)
             for month in range(1, 13):
                 burned_area_variable = (
                     h5file[f"burned_area/{month:02d}/burned_fraction"]
@@ -363,9 +367,9 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
 
         modelE_var_data *= SECONDS_IN_A_YEAR
         if year in year_dictionary:
-            year_dictionary[year] += modelE_var_data
+            year_dictionary[year] += modelE_var_data * seconds
         else:
-            year_dictionary[year] = modelE_var_data
+            year_dictionary[year] = modelE_var_data * seconds
 
         modelE_var_data = modelE_var_data.expand_dims(
             time=[year]
@@ -491,6 +495,7 @@ def define_subplot(
     masx=None,
     is_diff=False,
     glob=None,
+    logMap=False,
 ):
     masx = 0.7 * decade_data.max() if masx == None else masx
     # labelpad sets the distance of the colorbar from the map
@@ -543,31 +548,30 @@ def define_subplot(
         # # Create a colormap with white for values <= 0
         # cmap = plt.get_cmap(cmap).copy()
         # cmap.set_bad(color="white")  # Set masked values to white
-        # logNorm = mcolors.LogNorm(
-        #     vmin=1 if not is_diff else None, vmax=masx if not is_diff else None
-        # )
-        # p = ax.pcolormesh(
-        #     lons,
-        #     lats,
-        #     decade_data,
-        #     transform=ccrs.PlateCarree(),
-        #     cmap="jet",
-        #     norm=logNorm,
-        #     # vmin=0 if not is_diff else None,
-        #     # vmax=masx if not is_diff else None,
-        # )
-        #         print(0 if not is_diff else None, masx if not is_diff else None)
-        # logNorm = mcolors.LogNorm(
-        #     vmin=0 if not is_diff else None, vmax=masx if not is_diff else None
-        # )
-        p = ax.pcolormesh(
-            lons,
-            lats,
-            decade_data,
-            transform=ccrs.PlateCarree(),
-            cmap="jet",
-            vmin=float(0) if not is_diff else None,
-            vmax=float(masx) if not is_diff else None,
+        logNorm = mcolors.LogNorm(
+            vmin=1 if not is_diff else None, vmax=masx * 10000 if not is_diff else None
+        )
+        p = (
+            ax.pcolormesh(
+                lons,
+                lats,
+                decade_data,
+                transform=ccrs.PlateCarree(),
+                cmap="jet",
+                norm=logNorm,
+                # vmin=0 if not is_diff else None,
+                # vmax=masx if not is_diff else None,
+            )
+            if logMap
+            else ax.pcolormesh(
+                lons,
+                lats,
+                decade_data,
+                transform=ccrs.PlateCarree(),
+                cmap="jet",
+                vmin=float(0) if not is_diff else None,
+                vmax=float(masx) if not is_diff else None,
+            )
         )
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
@@ -588,6 +592,7 @@ def map_plot(
     units,
     cbarmac,
     is_diff=False,
+    logMap=False,
 ):
     """
     Plots the decadal mean burned area of both GFED and ModelE side by side.
@@ -615,6 +620,7 @@ def map_plot(
         clabel=units,
         masx=cbarmac,
         is_diff=is_diff,
+        logMap=logMap,
     )
 
 
@@ -663,15 +669,15 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             )
         case "BA_GFED4_upscale":
             total_value, longitude, latitude = read_gfed4s(
-                files=file_paths, upscaled=True, shape=(90, 144)
+                files=file_paths, upscaled=True
             )
         case "BA_GFED5":
             total_value, longitude, latitude = read_gfed5(
-                files=file_paths, shape=(720, 1440), upscaled=False
+                files=file_paths, upscaled=False
             )
         case "BA_GFED5_upscale":
             total_value, longitude, latitude = read_gfed5(
-                files=file_paths, shape=(90, 144), upscaled=True
+                files=file_paths, upscaled=True
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
@@ -831,6 +837,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             subplot_title=figure_label,
             units=units,
             cbarmac=figure_data["cbarmac"],
+            logMap=True,
         )
 
         # Plot the time series of burned area for GFED and ModelE
@@ -853,45 +860,74 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             else int(global_year_min)
         )
 
-    # map_figure, map_axis = plt.subplots(
-    #     nrows=1,
-    #     ncols=1,
-    #     figsize=(18, 10),
-    #     subplot_kw={"projection": ccrs.PlateCarree()},
-    # )
-    # (
-    #     (time_mean_data_diff),
-    #     (data_per_year_stack_diff),
-    #     longitude_diff,
-    #     latitude_diff,
-    #     units_diff,
-    #     start_year_diff,
-    #     end_year_diff,
-    #     figure_label_diff,
-    # ) = run_time_series_diff_analysis(folder_data_list[0], folder_data_list[1])
+    if len(folder_data_list) > 1:
+        loop_flag = True
+        while loop_flag:
+            print("Select the two datasets you would like to subtract")
+            print("Enter q to quit the subtraction loop")
+            print("NOTE: Please ensure the exact years match")
+            valid_selections = range(0, len(folder_data_list))
+            for index, folder_data in enumerate(folder_data_list):
+                print(str(index) + ".) ", folder_data["folder_path"])
+            first_selection = input(
+                f"Please enter the number for the first selected data {valid_selections}: "
+            )
 
-    # map_plot(
-    #     figure=map_figure,
-    #     axis=map_axis,
-    #     axis_length=1,
-    #     axis_index=0,
-    #     decade_data=time_mean_data_diff,
-    #     longitude=longitude_diff,
-    #     latitude=latitude_diff,
-    #     subplot_title=figure_label_diff,
-    #     units=units_diff,
-    #     cbarmac=None,
-    #     is_diff=True,
-    # )
+            if first_selection == "q" or not int(first_selection) in valid_selections:
+                loop_flag = False
+            else:
+                first_selection = int(first_selection)
 
-    # time_series_plot(
-    #     axis=time_analysis_axis,
-    #     data=data_per_year_stack_diff,
-    #     marker="o",
-    #     line_style="-",
-    #     color="r",
-    #     label=figure_label_diff,
-    # )
+            second_selection = input(
+                f"Please enter the number for the second selected data {valid_selections}: "
+            )
+
+            if second_selection == "q" or not int(second_selection) in valid_selections:
+                loop_flag = False
+            else:
+                second_selection = int(second_selection)
+
+            if loop_flag == True:
+                map_figure, map_axis = plt.subplots(
+                    nrows=1,
+                    ncols=1,
+                    figsize=(18, 10),
+                    subplot_kw={"projection": ccrs.PlateCarree()},
+                )
+                (
+                    (time_mean_data_diff),
+                    (data_per_year_stack_diff),
+                    longitude_diff,
+                    latitude_diff,
+                    units_diff,
+                    start_year_diff,
+                    end_year_diff,
+                    figure_label_diff,
+                ) = run_time_series_diff_analysis(
+                    folder_data_list[first_selection],
+                    folder_data_list[second_selection],
+                )
+                map_plot(
+                    figure=map_figure,
+                    axis=map_axis,
+                    axis_length=1,
+                    axis_index=0,
+                    decade_data=time_mean_data_diff,
+                    longitude=longitude_diff,
+                    latitude=latitude_diff,
+                    subplot_title=figure_label_diff,
+                    units=units_diff,
+                    cbarmac=None,
+                    is_diff=True,
+                )
+                time_series_plot(
+                    axis=time_analysis_axis,
+                    data=data_per_year_stack_diff,
+                    marker="o",
+                    line_style="-",
+                    color="r",
+                    label=figure_label_diff,
+                )
 
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
     time_analysis_axis.set_xlabel(
@@ -949,7 +985,8 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     # print(data_per_year_stack_two - data_per_year_stack_one)
     time_mean_data_one.values = time_mean_data_one.values - time_mean_data_two.values
     print((data_per_year_stack_two[0:2]))
-    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two[0:2]
+    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two
+
     min_year = min(
         data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
     )
