@@ -2,20 +2,44 @@
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
     "time_analysis_figure_data": {
-      "title": "Burned Area Data",
+      "title": "Lightning Data",
       "xlabel": "Yearly",
-      "ylabel": "Burned Area m^2"
+      "ylabel": "Lightning Strikes"
     },
     "folders": [
       {
-        "folder_path": "./data/GFED4",
-        "file_type": "BA_GFED4",
+        "folder_path": "./data/ModelE_Monthly",
+        "file_type": "ModelE_Monthly",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "b",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE FLASH Lightning Data 1.e+10",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/upscale",
+        "file_type": "lightning_upscale",
         "variables": [],
+        "figure_data": {
+          "color": "c",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Lighting Data Upscale",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/ModelE_Monthly",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CtoG"],
         "figure_data": {
           "color": "g",
           "marker": "x",
           "line_style": "-",
-          "label": "Original GFED4 Burned Area 1.e+10 (720x1440)",
+          "label": "ModelE CtoG Lightning Data 1.e+10",
           "cbarmac": null
         }
       }
