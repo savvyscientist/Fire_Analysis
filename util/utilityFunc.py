@@ -456,6 +456,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 attrs=attribute_dict,
             )
 
+            attribute_dict["units"] = "lightning strokes km-2 y-1"
             yearly_var_data_dict_value = [
                 data_array * (364 if leap_year_check(int(year)) else 365)
                 for year, data_array in yearly_var_data.items()
