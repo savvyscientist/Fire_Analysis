@@ -358,18 +358,19 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
             if monthly
             else int(file_path.split("ANN")[1][:4])
         )
-        month = file_path.split(".")[1][-7:-4] if monthly else None
-        print(month)
-        if month != "FEB":
-            seconds = MONTHLISTDICT[month] * DAYS_TO_SECONDS
-        elif month == "FEB" and leap_year_check(year):
-            seconds = 29 * DAYS_TO_SECONDS
+        if monthly:
+            month = file_path.split(".")[1][-7:-4] if monthly else None
+            if month != "FEB":
+                seconds = MONTHLISTDICT[month] * DAYS_TO_SECONDS
+            elif month == "FEB" and leap_year_check(year):
+                seconds = 29 * DAYS_TO_SECONDS
 
         modelE_var_data *= SECONDS_IN_A_YEAR
-        if year in year_dictionary:
-            year_dictionary[year] += modelE_var_data * seconds
-        else:
-            year_dictionary[year] = modelE_var_data * seconds
+        if monthly:
+            if year in year_dictionary:
+                year_dictionary[year] += modelE_var_data * seconds
+            else:
+                year_dictionary[year] = modelE_var_data * seconds
 
         modelE_var_data = modelE_var_data.expand_dims(
             time=[year]
@@ -400,9 +401,8 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             # dataset containing all xarray data array (used to create the final netcdf file)
             dataset_dict = {}
             attribute_dict = {}
-            yearly_var_data_array = []
+            yearly_var_data = {}
             year_time_data = []
-            updated_var_data_array = []
 
             # update the units to match the upscaling process
             density_variable = netcdf_dataset.variables["density"]
@@ -430,24 +430,23 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
-                    var_data_array = density_variable_data[month] / DAYS_TO_SECONDS
-                variable_data = variable_data + var_data_array
-                if (year) < (current_year):
-                    year = current_year
-                    year_time_data.append(str(year))
-                    yearly_var_data_array.append(variable_data)
-                    variable_data = np.zeros(shape=(density_variable_data[0].shape))
-                # print(f"Current Month {month}: ", var_data_array.sum())
-                updated_var_data_array.append(var_data_array)
+                    var_data_array = density_variable_data[month]
 
+                if current_year in yearly_var_data:
+                    yearly_var_data[int(current_year)] += var_data_array
+                else:
+                    yearly_var_data[int(current_year)] = var_data_array
+
+                # print(f"Current Month {month}: ", var_data_array.sum())
+            yearly_var_data = dict(sorted(yearly_var_data.items()))
             attribute_dict["units"] = "lightning strikes/m-2/year"
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
             longitudes = np.linspace(-180, 180, density_variable.shape[-1])
             # creates the data array and saves it to a file
             var_data_array_xarray = xr.DataArray(
-                (updated_var_data_array),
+                list(yearly_var_data.values()),
                 coords={
-                    "time": time_data_array,
+                    "time": list(yearly_var_data.keys()),
                     "latitude": latitudes,
                     "longitude": longitudes,
                 },
@@ -456,9 +455,9 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             )
 
             yearly_var_data_array_xarray = xr.DataArray(
-                (yearly_var_data_array),
+                list(yearly_var_data.values()),
                 coords={
-                    "time": year_time_data,
+                    "time": list(yearly_var_data.keys()),
                     "latitude": latitudes,
                     "longitude": longitudes,
                 },
