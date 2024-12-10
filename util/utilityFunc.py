@@ -439,7 +439,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
 
                 # print(f"Current Month {month}: ", var_data_array.sum())
             yearly_var_data = dict(sorted(yearly_var_data.items()))
-            attribute_dict["units"] = "lightning strikes/m-2/year"
+            attribute_dict["units"] = "lightning strokes km-2 d-1"
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
             longitudes = np.linspace(-180, 180, density_variable.shape[-1])
             # creates the data array and saves it to a file
