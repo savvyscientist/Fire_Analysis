@@ -360,17 +360,18 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         )
         if monthly:
             month = file_path.split(".")[1][-7:-4] if monthly else None
-            if month != "FEB":
-                seconds = MONTHLISTDICT[month] * DAYS_TO_SECONDS
-            elif month == "FEB" and leap_year_check(year):
-                seconds = 29 * DAYS_TO_SECONDS
+            if month == "FEB" and leap_year_check(year):
+                months_seconds = 29 * DAYS_TO_SECONDS
+            else:
+                months_seconds = MONTHLISTDICT[month] * DAYS_TO_SECONDS
 
-        modelE_var_data *= SECONDS_IN_A_YEAR
         if monthly:
             if year in year_dictionary:
-                year_dictionary[year] += modelE_var_data * seconds
+                year_dictionary[year] += modelE_var_data * months_seconds
             else:
-                year_dictionary[year] = modelE_var_data * seconds
+                year_dictionary[year] = modelE_var_data * months_seconds
+        else:
+            modelE_var_data *= SECONDS_IN_A_YEAR
 
         modelE_var_data = modelE_var_data.expand_dims(
             time=[year]
