@@ -402,7 +402,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             dataset_dict = {}
             attribute_dict = {}
             yearly_var_data = {}
-            year_time_data = []
+            monthly_data = []
 
             # update the units to match the upscaling process
             density_variable = netcdf_dataset.variables["density"]
@@ -437,6 +437,8 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 else:
                     yearly_var_data[int(current_year)] = var_data_array
 
+                monthly_data.append(var_data_array)
+
                 # print(f"Current Month {month}: ", var_data_array.sum())
             yearly_var_data = dict(sorted(yearly_var_data.items()))
             attribute_dict["units"] = "lightning strokes km-2 d-1"
@@ -444,9 +446,9 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             longitudes = np.linspace(-180, 180, density_variable.shape[-1])
             # creates the data array and saves it to a file
             var_data_array_xarray = xr.DataArray(
-                list(yearly_var_data.values()),
+                monthly_data,
                 coords={
-                    "time": list(yearly_var_data.keys()),
+                    "time": time_data_array,
                     "latitude": latitudes,
                     "longitude": longitudes,
                 },
@@ -454,8 +456,12 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 attrs=attribute_dict,
             )
 
+            yearly_var_data_dict_value = [
+                data_array * (364 if leap_year_check(int(year)) else 365)
+                for year, data_array in yearly_var_data.items()
+            ]
             yearly_var_data_array_xarray = xr.DataArray(
-                list(yearly_var_data.values()),
+                yearly_var_data_dict_value,
                 coords={
                     "time": list(yearly_var_data.keys()),
                     "latitude": latitudes,
