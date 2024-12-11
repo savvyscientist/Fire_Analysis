@@ -1013,8 +1013,8 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     # print(time_mean_data_two.values)
     # print(data_per_year_stack_two - data_per_year_stack_one)
     time_mean_data_one.values = time_mean_data_one.values - time_mean_data_two.values
-    print((data_per_year_stack_two[3:5]))
-    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two[3:5]
+    print((data_per_year_stack_two[0:-2]))
+    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two[0:-2]
 
     min_year = min(
         data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
