@@ -4,7 +4,7 @@
     "time_analysis_figure_data": {
       "title": "Lightning Data",
       "xlabel": "Yearly",
-      "ylabel": "Lightning Strikes"
+      "ylabel": "Lightning Strokes"
     },
     "folders": [
       {
@@ -16,31 +16,31 @@
           "marker": "o",
           "line_style": "-",
           "label": "Lighting Data Upscale",
-          "cbarmac": null
+          "cbarmax": null
         }
       },
       {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE",
+        "folder_path": "./data/ModelE_Monthly",
+        "file_type": "ModelE_Monthly",
         "variables": ["CtoG"],
         "figure_data": {
           "color": "g",
           "marker": "x",
           "line_style": "-",
           "label": "ModelE CtoG Lightning Data 1.e+10",
-          "cbarmac": null
+          "cbarmax": null
         }
       },
       {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE",
+        "folder_path": "./data/ModelE_Monthly",
+        "file_type": "ModelE_Monthly",
         "variables": ["FLASH"],
         "figure_data": {
           "color": "b",
           "marker": "x",
           "line_style": "-",
           "label": "ModelE FLASH Lightning Data 1.e+10",
-          "cbarmac": null
+          "cbarmax": null
         }
       }
     ]

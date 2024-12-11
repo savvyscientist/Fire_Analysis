@@ -353,19 +353,21 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
             for attr_name in ds[variable].attrs:
                 attribute_dict[attr_name] = getattr(ds[variable], attr_name)
 
+        print(monthly)
+        print(file_path.split("."))
         year = (
-            int(file_path.split(".")[0][-4:])
+            int(file_path.split(".")[1][-4:])
             if monthly
             else int(file_path.split("ANN")[1][:4])
         )
         if monthly:
             month = file_path.split(".")[1][-7:-4] if monthly else None
-            if month == "FEB" and leap_year_check(year):
-                months_seconds = 29 * DAYS_TO_SECONDS
-            else:
-                months_seconds = MONTHLISTDICT[month] * DAYS_TO_SECONDS
+            months_seconds = (
+                29 * DAYS_TO_SECONDS
+                if month == "FEB" and leap_year_check(year)
+                else MONTHLISTDICT[month] * DAYS_TO_SECONDS
+            )
 
-        if monthly:
             if year in year_dictionary:
                 year_dictionary[year] += modelE_var_data * months_seconds
             else:
@@ -381,9 +383,16 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         datasets.append(modelE_var_data)
     year_dictionary = dict(sorted(year_dictionary.items()))
     # Concatenate all datasets along the 'time' dimension
-    for year in year_dictionary.keys():
-        year_dictionary[year] = year_dictionary[year].expand_dims(time=[year])
-    modelE_all_year = xr.concat(year_dictionary.values(), dim="time")
+    if monthly:
+        for year in year_dictionary.keys():
+            year_dictionary[year] = (year_dictionary[year] * 12).expand_dims(
+                time=[year]
+            )
+    modelE_all_year = (
+        xr.concat(year_dictionary.values(), dim="time")
+        if monthly
+        else xr.concat(datasets, dim="time")
+    )
     attribute_dict["units"] = "1.e+10 flashes/m2/yr"
     modelE_all_year.attrs = attribute_dict
     modelE_lons = ds["lon"]
@@ -421,25 +430,27 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             date_range = pd.date_range(
                 start_date, freq="MS", periods=len(density_variable_data)
             )
-            variable_data = np.zeros(shape=(density_variable_data[0].shape))
-            year = int(start_date.split("-")[0])
+            print(len(density_variable_data))
             for month in range(len(density_variable_data)):
                 current_year = int(str(date_range[month]).split("-")[0])
+
                 # change to upscaled checks if the data is already upscaled
                 if upscaled:
-                    var_data_array = density_variable_data[month]
+                    grid_cell_area = calculate_grid_area(
+                        grid_area_shape=density_variable_data[month].shape
+                    )
+                    var_data_array = density_variable_data[month] * grid_cell_area
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
                     var_data_array = density_variable_data[month]
 
-                if current_year in yearly_var_data:
+                if int(current_year) in yearly_var_data:
                     yearly_var_data[int(current_year)] += var_data_array
                 else:
                     yearly_var_data[int(current_year)] = var_data_array
 
                 monthly_data.append(var_data_array)
-
                 # print(f"Current Month {month}: ", var_data_array.sum())
             yearly_var_data = dict(sorted(yearly_var_data.items()))
             attribute_dict["units"] = "lightning strokes km-2 d-1"
@@ -460,8 +471,9 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             attribute_dict["units"] = "lightning strokes km-2 y-1"
             yearly_var_data_dict_value = [
                 data_array * (364 if leap_year_check(int(year)) else 365)
-                for year, data_array in yearly_var_data.items()
+                for year, data_array in list(yearly_var_data.items())
             ]
+
             yearly_var_data_array_xarray = xr.DataArray(
                 yearly_var_data_dict_value,
                 coords={
@@ -471,9 +483,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 },
                 dims=["time", "latitude", "longitude"],
                 attrs=attribute_dict,
-            )
-            var_data_array_xarray = var_data_array_xarray.where(
-                var_data_array_xarray > 0.0, 0.0
             )
             yearly_var_data_array_xarray = yearly_var_data_array_xarray.where(
                 yearly_var_data_array_xarray > 0.0, 0.0
@@ -556,7 +565,7 @@ def define_subplot(
         # cmap = plt.get_cmap(cmap).copy()
         # cmap.set_bad(color="white")  # Set masked values to white
         logNorm = mcolors.LogNorm(
-            vmin=1 if not is_diff else None, vmax=masx * 10000 if not is_diff else None
+            vmin=1 if not is_diff else None, vmax=masx if not is_diff else None
         )
         p = (
             ax.pcolormesh(
@@ -566,8 +575,6 @@ def define_subplot(
                 transform=ccrs.PlateCarree(),
                 cmap="jet",
                 norm=logNorm,
-                # vmin=0 if not is_diff else None,
-                # vmax=masx if not is_diff else None,
             )
             if logMap
             else ax.pcolormesh(
@@ -583,7 +590,6 @@ def define_subplot(
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
-
     return ax
 
 
@@ -597,7 +603,7 @@ def map_plot(
     latitude,
     subplot_title,
     units,
-    cbarmac,
+    cbarmax,
     is_diff=False,
     logMap=False,
 ):
@@ -625,7 +631,7 @@ def map_plot(
         fontsize=10,
         title=subplot_title,
         clabel=units,
-        masx=cbarmac,
+        masx=cbarmax,
         is_diff=is_diff,
         logMap=logMap,
     )
@@ -739,7 +745,7 @@ def obtain_time_series_xarray(
     time_dimension = total_value.dims[0]
     sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
     # Calculate the mean burned area over the decade
-    time_mean_data = total_value.mean(dim=time_dimension)
+    time_mean_data = total_value.mean(dim="time")
 
     # Calculate total burned area for each year from GFED4s data
     # this is fine for BA which is in units of m^2 or km^2, but is not OK
@@ -755,6 +761,7 @@ def obtain_time_series_xarray(
     # total_data_array = total_value.sum(dim=sum_dimension).values
 
     units = total_value.attrs["units"]
+    print(units)
     # For model E data display on the figure weather the scaling factor has been multiplied
     # Calculate climatological total over the time dimension
     time_total_data = total_value.sum(dim=time_dimension)
@@ -764,7 +771,7 @@ def obtain_time_series_xarray(
         # Convert m^2 to mega hectors
         total_data_array = total_data_array
         # print(f"Multiplied the M2TOMHA for {NetCDF_Type}")
-    elif "m-2".lower() or "m^-2".lower() in units:
+    elif " m-2".lower() in units or " m^-2".lower() in units:
         # Calculate the lat-lon total over the climatological period
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
         grid_cell_area = calculate_grid_area(
@@ -776,6 +783,7 @@ def obtain_time_series_xarray(
     # Review cases that work for fractions
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
+        print("Regular Sum Implemented")
 
     start_year = int(total_value.coords["time"].values[0])
     end_year = int(total_value.coords["time"].values[-1])
@@ -784,7 +792,7 @@ def obtain_time_series_xarray(
     data_per_year_stack = np.column_stack((years, total_data_array))
 
     return (
-        time_total_data,
+        time_mean_data,
         data_per_year_stack,
         longitude,
         latitude,
@@ -843,8 +851,8 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             latitude=latitude,
             subplot_title=figure_label,
             units=units,
-            cbarmac=figure_data["cbarmac"],
-            logMap=True,
+            cbarmax=figure_data["cbarmax"],
+            logMap=False,
         )
 
         # Plot the time series of burned area for GFED and ModelE
@@ -924,7 +932,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
                     latitude=latitude_diff,
                     subplot_title=figure_label_diff,
                     units=units_diff,
-                    cbarmac=None,
+                    cbarmax=None,
                     is_diff=True,
                 )
                 time_series_plot(
@@ -991,8 +999,8 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     # print(time_mean_data_two.values)
     # print(data_per_year_stack_two - data_per_year_stack_one)
     time_mean_data_one.values = time_mean_data_one.values - time_mean_data_two.values
-    print((data_per_year_stack_two[0:2]))
-    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two
+    print((data_per_year_stack_two[3:5]))
+    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two[3:5]
 
     min_year = min(
         data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
