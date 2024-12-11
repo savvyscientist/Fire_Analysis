@@ -363,12 +363,12 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         print(monthly)
         print(file_path.split("."))
         year = (
-            int(file_path.split(".")[1][-4:])
+            int(file_path.split(".")[0][-4:])
             if monthly
             else int(file_path.split("ANN")[1][:4])
         )
         if monthly:
-            month = file_path.split(".")[1][-7:-4] if monthly else None
+            month = file_path.split(".")[0][-7:-4] if monthly else None
             months_seconds = (
                 29 * DAYS_TO_SECONDS
                 if month == "FEB" and leap_year_check(year)
@@ -389,10 +389,13 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         # Append the processes dataset to the list
         datasets.append(modelE_var_data)
     year_dictionary = dict(sorted(year_dictionary.items()))
+    #1E6 converts from 1/m^2 to 1/km^2 and 1E-10 taken from the unit factor of CtoG and Flash
+    #this introduces a bug if we apply read_modelE to variables other than CtoG and Flash
+    unit_convert = 1E6 * 1E-10
     # Concatenate all datasets along the 'time' dimension
     if monthly:
         for year in year_dictionary.keys():
-            year_dictionary[year] = (year_dictionary[year] * 12).expand_dims(
+            year_dictionary[year] = (year_dictionary[year] * unit_convert).expand_dims(
                 time=[year]
             )
     modelE_all_year = (
@@ -400,7 +403,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         if monthly
         else xr.concat(datasets, dim="time")
     )
-    attribute_dict["units"] = "1.e+10 flashes/m2/yr"
+    attribute_dict["units"] = "flashes/km2/yr"
     modelE_all_year.attrs = attribute_dict
     modelE_lons = ds["lon"]
     modelE_lats = ds["lat"]
@@ -447,7 +450,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                     grid_cell_area = calculate_grid_area(
                         grid_area_shape=density_variable_data[month].shape
                     )
-                    var_data_array = density_variable_data[month] * grid_cell_area
+                    var_data_array = density_variable_data[month]
                 # if the data is not upscaled preform further calculations
                 else:
                     # var_data_array = density_variable[:][month]
@@ -863,7 +866,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             subplot_title=figure_label,
             units=units,
             cbarmax=figure_data["cbarmax"],
-            logMap=False,
+            logMap=True,
         )
 
         # Plot the time series of burned area for GFED and ModelE
