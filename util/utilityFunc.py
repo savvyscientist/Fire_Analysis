@@ -307,6 +307,13 @@ def leap_year_check(year):
         return True
 
 
+def days_to_months(month, year):
+    if (str(month) == "02") and leap_year_check(int(year)):
+        return 29
+    else:
+        return MONTHLISTDICT[str(month)]
+
+
 def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False):
     """
     Reads ModelE BA data (BA_tree, BA_shrub, BA_grass) for the given year range, sums them to calculate
@@ -433,6 +440,7 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             print(len(density_variable_data))
             for month in range(len(density_variable_data)):
                 current_year = int(str(date_range[month]).split("-")[0])
+                curr_month = str(date_range[month]).split("-")[1]
 
                 # change to upscaled checks if the data is already upscaled
                 if upscaled:
@@ -445,6 +453,9 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                     # var_data_array = density_variable[:][month]
                     var_data_array = density_variable_data[month]
 
+                var_data_array = var_data_array * days_to_months(
+                    curr_month, current_year
+                )
                 if int(current_year) in yearly_var_data:
                     yearly_var_data[int(current_year)] += var_data_array
                 else:
@@ -469,13 +480,13 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             )
 
             attribute_dict["units"] = "lightning strokes km-2 y-1"
-            yearly_var_data_dict_value = [
-                data_array * (364 if leap_year_check(int(year)) else 365)
-                for year, data_array in list(yearly_var_data.items())
-            ]
+            # yearly_var_data_dict_value = [
+            #     data_array * (364 if leap_year_check(int(year)) else 365)
+            #     for year, data_array in list(yearly_var_data.items())
+            # ]
 
             yearly_var_data_array_xarray = xr.DataArray(
-                yearly_var_data_dict_value,
+                list(yearly_var_data.values()),
                 coords={
                     "time": list(yearly_var_data.keys()),
                     "latitude": latitudes,
