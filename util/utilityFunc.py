@@ -1,6 +1,6 @@
 import traceback
 import rasterio
-from os import listdir, makedirs, remove
+from os import listdir, makedirs, remove, mkdir
 from os.path import isfile, join, basename, exists, dirname
 import re
 from rasterio.transform import from_origin
@@ -822,6 +822,8 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
 
     global_year_max = 0
     global_year_min = 9999
+    if not exists("figures"):
+        mkdir("figures")
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
         map_figure, map_axis = plt.subplots(
@@ -888,6 +890,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             if int(global_year_min) > int(start_year)
             else int(global_year_min)
         )
+        map_figure.savefig(f"figures/map_figure_{index}")
 
     if len(folder_data_list) > 1:
         loop_flag = True
@@ -904,6 +907,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
 
             if first_selection == "q" or not int(first_selection) in valid_selections:
                 loop_flag = False
+                break
             else:
                 first_selection = int(first_selection)
 
@@ -913,6 +917,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
 
             if second_selection == "q" or not int(second_selection) in valid_selections:
                 loop_flag = False
+                break
             else:
                 second_selection = int(second_selection)
 
@@ -957,12 +962,16 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
                     color="r",
                     label=figure_label_diff,
                 )
+                map_figure.savefig(
+                    f"figures/figure{first_selection}_and_figure{second_selection}_diff_map"
+                )
 
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
     time_analysis_axis.set_xlabel(
         f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
     )
     time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
+    _.savefig(f"figures/time_analysis_figure")
     plt.show()
 
 
