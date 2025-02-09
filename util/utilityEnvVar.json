@@ -1,0 +1,48 @@
+{
+  "selected_script": ["time_analysis_version_two"],
+  "time_analysis_version_two": {
+    "time_analysis_figure_data": {
+      "title": "Lightning Data",
+      "xlabel": "Yearly",
+      "ylabel": "Lightning Strokes"
+    },
+    "folders": [
+      {
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/regridding/upscale",
+        "file_type": "lightning_upscale",
+        "variables": [],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Lighting Data Upscale",
+          "cbarmax": 10 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nk_CCycle_E6obioF40/monthly",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CtoG"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE CtoG Lightning Data",
+          "cbarmax": 10 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nk_CCycle_E6obioF40/monthly",
+        "file_type": "ModelE_Monthly",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "b",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE FLASH Lightning Data",
+          "cbarmax": 10
+        }
+      }
+    ]
+  }
+}

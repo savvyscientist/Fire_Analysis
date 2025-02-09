@@ -1,0 +1,60 @@
+{
+  "selected_script": ["time_analysis_version_two"],
+  "time_analysis_version_two": {
+    "time_analysis_figure_data": {
+      "title": "Lightning Data",
+      "xlabel": "Yearly",
+      "ylabel": "Lightning Strikes"
+    },
+    "folders": [
+      {
+        "folder_path": "./data/upscale",
+        "file_type": "lightning_upscale",
+        "variables": [],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Lighting Data Upscale",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/Lightning",
+        "file_type": "lightning",
+        "variables": [],
+        "figure_data": {
+          "color": "y",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Lighting Data",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["CtoG"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE CtoG Lightning Data 1.e+10",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["FLASH"],
+        "figure_data": {
+          "color": "b",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE FLASH Lightning Data 1.e+10",
+          "cbarmac": null
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,75 @@
+
+            {
+        "folder_path": "./data/GFED5_upscaled_90144",
+        "file_type": "BA_GFED5_upscale",
+        "variables": [],
+        "figure_data": {
+          "color": "r",
+          "marker": "x",
+          "line_style": "-",
+          "label": "GFED5 Upscaled Data 90x144",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/GFED4_upscaled",
+        "file_type": "BA_GFED4_upscale",
+        "variables": [],
+        "figure_data": {
+          "color": "b",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED4 Upscaled Data 90x144",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/ModelE",
+        "file_type": "ModelE",
+        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE Burned Area (BA_tree + BA_shrub + BA_grass) Data",
+          "cbarmac": null
+        }
+      }
+
+
+      {
+  "selected_script": ["time_analysis_version_two"],
+  "time_analysis_version_two": {
+    "time_analysis_figure_data": {
+      "title": "Lightning Data",
+      "xlabel": "Yearly",
+      "ylabel": "Lightning Strikes"
+    },
+    "folders": [
+      {
+        "folder_path": "./data/GFED5",
+        "file_type": "BA_GFED5",
+        "variables": [],
+        "figure_data": {
+          "color": "b",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED5 Upscaled Data 180x360",
+          "cbarmac": null
+        }
+      },
+      {
+        "folder_path": "./data/GFED4",
+        "file_type": "BA_GFED4",
+        "variables": [],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED4 Original Data 180x360",
+          "cbarmac": null
+        }
+      }
+    ]
+  }
+}
