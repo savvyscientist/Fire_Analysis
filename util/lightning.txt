@@ -4,11 +4,11 @@
     "time_analysis_figure_data": {
       "title": "Lightning Data",
       "xlabel": "Yearly",
-      "ylabel": "Lightning Strikes"
+      "ylabel": "Lightning Strokes"
     },
     "folders": [
       {
-        "folder_path": "./data/upscale",
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/regridding/upscale",
         "file_type": "lightning_upscale",
         "variables": [],
         "figure_data": {
@@ -16,43 +16,31 @@
           "marker": "o",
           "line_style": "-",
           "label": "Lighting Data Upscale",
-          "cbarmac": null
+          "cbarmax": 10 
         }
       },
       {
-        "folder_path": "./data/Lightning",
-        "file_type": "lightning",
-        "variables": [],
-        "figure_data": {
-          "color": "y",
-          "marker": "o",
-          "line_style": "-",
-          "label": "Lighting Data",
-          "cbarmac": null
-        }
-      },
-      {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE",
+        "folder_path": "/discover/nobackup/kmezuman/nk_CCycle_E6obioF40/monthly",
+        "file_type": "ModelE_Monthly",
         "variables": ["CtoG"],
         "figure_data": {
           "color": "g",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE CtoG Lightning Data 1.e+10",
-          "cbarmac": null
+          "label": "ModelE CtoG Lightning Data",
+          "cbarmax": 10 
         }
       },
       {
-        "folder_path": "./data/ModelE",
-        "file_type": "ModelE",
+        "folder_path": "/discover/nobackup/kmezuman/nk_CCycle_E6obioF40/monthly",
+        "file_type": "ModelE_Monthly",
         "variables": ["FLASH"],
         "figure_data": {
           "color": "b",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE FLASH Lightning Data 1.e+10",
-          "cbarmac": null
+          "label": "ModelE FLASH Lightning Data",
+          "cbarmax": 10
         }
       }
     ]

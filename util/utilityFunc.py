@@ -66,6 +66,54 @@ def extract_scaling_factor(units):
     except:
         return 1.0, units  # Default scaling factor is 1 if not specified
 
+def handle_model_units(data_array, units):
+    """
+    Apply appropriate scaling based on variable units.
+   
+    Parameters:
+        data_array: xarray DataArray
+        units: str, unit string from ModelE
+    Returns:
+        scaled_data: scaled DataArray
+        new_units: str, updated units after scaling
+    """
+    grid_cell_area = None
+    scaling_factor = 1.0
+    new_units = units
+
+    # Dictionary of unit handlers
+    unit_handlers = {
+        'kg/m2/s': {
+            'needs_area': True,
+            'new_units': 'kg/s'
+        },
+        '/m2': {
+            'scaling': 1E6 * 1E-10,  # For flash counts
+            'new_units': 'flashes/km2/yr'
+        },
+        'm-2': {
+            'scaling': 1E6 * 1E-10,  # For flash counts
+            'new_units': 'flashes/km2/yr'
+        }
+    }
+
+    for unit_pattern, handler in unit_handlers.items():
+        if unit_pattern in units:
+            if handler.get('needs_area', False):
+                if grid_cell_area is None:
+                    grid_cell_area = calculate_grid_area(
+                        data_array.shape,
+                        units='m^2'
+                    )
+                data_array = data_array * grid_cell_area
+            if handler.get('scaling'):
+                data_array = data_array * handler['scaling']
+            new_units = handler['new_units']
+            break
+
+    return data_array, new_units
+
+
 
 def calculate_grid_area(grid_area_shape, units="km"):
     # Grid resolution
@@ -316,8 +364,7 @@ def days_to_months(month, year):
 
 def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False):
     """
-    Reads ModelE BA data (BA_tree, BA_shrub, BA_grass) for the given year range, sums them to calculate
-    modelE_BA, and returns the annual sum for each year.
+    Reads ModelE data for given variables
 
     Parameters:
     startyear (int): The starting year.
@@ -391,19 +438,25 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
     year_dictionary = dict(sorted(year_dictionary.items()))
     #1E6 converts from 1/m^2 to 1/km^2 and 1E-10 taken from the unit factor of CtoG and Flash
     #this introduces a bug if we apply read_modelE to variables other than CtoG and Flash
-    unit_convert = 1E6 * 1E-10
+    #unit_convert = 1E6 * 1E-10
+    #unit_convert = 1.
     # Concatenate all datasets along the 'time' dimension
     if monthly:
         for year in year_dictionary.keys():
-            year_dictionary[year] = (year_dictionary[year] * unit_convert).expand_dims(
-                time=[year]
-            )
-    modelE_all_year = (
-        xr.concat(year_dictionary.values(), dim="time")
-        if monthly
-        else xr.concat(datasets, dim="time")
-    )
-    attribute_dict["units"] = "flashes/km2/yr"
+            data, new_units = handle_model_units(
+                    year_dictionary[year],
+                    attribute_dict.get('units',''))
+            year_dictionary[year] = data.expand_dims(time=[year])
+            attribute_dict['units'] = new_units
+        modelE_all_year = xr.concat(year_dictionary.values(), dim="time")
+    else:
+        modelE_all_year = xr.concat(datasets, dim="time")
+        modelE_all_year, new_units = handle_model_unita(
+            modelE_all_year,
+            attribute_dict.get('units','')
+        )
+        attribute_dict["units"] = new_units
+
     modelE_all_year.attrs = attribute_dict
     modelE_lons = ds["lon"]
     modelE_lats = ds["lat"]
