@@ -291,33 +291,53 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
 
 def read_gfed4s_emis(files, upscaled=False):
     """
-    Reads GFED4s emissions processed as ModelE input,
-    calculates the annual total emissions, and returns the data as xarray.DataArray
+    Read GFED4s emissions data from multiple netCDF files using xarray. 
+    Parameters
+    ---------- 
+    files : list List of paths to GFED4s emissions netCDF files 
+    Returns 
+    ------- 
+    dict 
+       Dictionary containing: 
+       - 'lon': longitude array (144,) 
+       - 'lat': latitude array (90,) 
+       - 'time': time array (nyears * 12,) 
+       - 'data': emissions data array (nyears * 12, 90, 144)
     """
-    emissions_list = []
+
+    #Initialize lists to store data from each file
+    all_data = []
     time_array = []
 
-    for file_path in files:
-        attribute_dict = {}
-        # Open the HDF5 file using h5py
-        with h5py.File(file_path, "r") as h5file:
-            # Load lat and lon for constructing the xarray dataset
-            lat = h5file["lat"][:]
-            lon = h5file["lon"][:]
-                  
-     try:         
-         ann_sum = np.zeros((config['nlat'], config['nlon']), dtype=float)
-         with nc.Dataset(obs_filepath) as f_obs:
-             for k in range(12):
-                 GFED_data = f_obs.variables['CO2n'][k, :, :]  # [kg m-2 s-1]
-                 GFED_CO2 = GFED_data.reshape(config['nlat'], config['nlon'])
-                 GFED_CO2 = np.where(GFED_CO2 <= 0., zero_mat, GFED_CO2)
-                 ndays = calendar.monthrange(year, k+1)[1]
-                 ann_sum += (GFED_CO2 * ndays * s_in_day)  # kgCO2 m-2 M-1
-                  
-             ann_sum *= kgtog  # gCO2 m-2 yr-1
-             tot_GFED = np.nansum(ann_sum * axyp)  # gCO2 yr-1
-             tot_GFED = format(tot_GFED, '.3e')
+    #Read first file to get dimensions
+    ds = xr.open_dataset(files[0])
+    lon = ds.lon.values
+    lat = ds.lat.values
+
+    #Find the emissions variable (first non-coordinated variable)
+    data_vars = list(ds.data_vars)
+    emis_var = data_vars[0]
+    ds.close()
+
+    # Loop over all files 
+    for filename in files:
+        ds = xr.open_dataset(filename) 
+
+        # Read time and data 
+        time = ds.time.values 
+        data = ds[emis_var].values 
+
+        # Append to lists 
+        time_array.append(time) 
+        all_data.append(data) 
+
+        ds.close() 
+
+    # Concatenate data from all files 
+    time = np.concatenate(time_array) # (nyears * 12,) 
+    all_data = np.concatenate(all_data, axis=0)  # (nyears * 12, 90, 144) 
+
+    return all_data, lon, lat
                   
     return total_emis_all_years, lon, lat
 
