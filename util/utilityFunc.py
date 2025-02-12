@@ -20,8 +20,6 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from netCDF4 import Dataset
-from datetime import datetime, timedelta
-import cftime
 
 from utilityGlobal import (
     M2TOMHA,
@@ -310,7 +308,7 @@ def read_gfed4s_emis(files, upscaled=False):
     time_array = []
 
     #Read first file to get dimensions
-    ds = xr.open_dataset(files[0])
+    ds = xr.open_dataset(files[0], decode_times=False)
     lon = ds.lon.values
     lat = ds.lat.values
 
@@ -321,28 +319,21 @@ def read_gfed4s_emis(files, upscaled=False):
 
     # Loop over all files
     for filename in files:
-        ds = xr.open_dataset(filename)
+        ds = xr.open_dataset(filename, decode_times=False)
 
-        #convert time values (months since 1750-01) to datetime
+        # Get time values (months since 1750-01)
         time = ds.time.values
-        dates = [ref_data + timedelta(days=(month *30.44)) for month in time_values]
-
-        # Check if dates are in correct year based on filename
-        year = int(filename.split('_')[-1].split('.')[0])
-        if not all(date.year == year for date in dates):
-            raise ValueError(f"Time values in {filename} don't match expected year {year}")
 
         # Read data
         data = ds[emis_var].values
 
         # Append to lists
-        time_array.append(dates)
+        time_array.append(time)
         all_data.append(data)
 
         ds.close()
 
     # Concatenate data from all files
-    time = np.concatenate(time_array) # (nyears * 12,)
     all_data = np.concatenate(all_data, axis=0) # (nyears * 12, 90, 144)
 
     return all_data, lon, lat
