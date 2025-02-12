@@ -846,6 +846,10 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             total_value, longitude, latitude = read_lightning_data(
                 files=file_paths, upscaled=True
             )
+        case "GFED4s_emis":
+            total_value, longitude, latitude = read_gfed4s_emis(
+                files=file_paths, upscaled=True
+            )
         case _:
             print("[-] No Parsing Script Found For", NetCDF_Type)
     return (total_value, longitude, latitude)
