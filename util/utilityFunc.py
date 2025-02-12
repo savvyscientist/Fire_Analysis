@@ -20,6 +20,8 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from netCDF4 import Dataset
+from datetime import datetime, timedelta
+import cftime
 
 from utilityGlobal import (
     M2TOMHA,
@@ -297,12 +299,10 @@ def read_gfed4s_emis(files, upscaled=False):
     files : list List of paths to GFED4s emissions netCDF files 
     Returns 
     ------- 
-    dict 
-       Dictionary containing: 
+    tuple
+       - 'all_data': emissions data array (nyears * 12, 90, 144)
        - 'lon': longitude array (144,) 
        - 'lat': latitude array (90,) 
-       - 'time': time array (nyears * 12,) 
-       - 'data': emissions data array (nyears * 12, 90, 144)
     """
 
     #Initialize lists to store data from each file
@@ -319,23 +319,31 @@ def read_gfed4s_emis(files, upscaled=False):
     emis_var = data_vars[0]
     ds.close()
 
-    # Loop over all files 
+    # Loop over all files
     for filename in files:
-        ds = xr.open_dataset(filename) 
+        ds = xr.open_dataset(filename)
 
-        # Read time and data 
-        time = ds.time.values 
-        data = ds[emis_var].values 
+        #convert time values (months since 1750-01) to datetime
+        time = ds.time.values
+        dates = [ref_data + timedelta(days=(month *30.44)) for month in time_values]
 
-        # Append to lists 
-        time_array.append(time) 
-        all_data.append(data) 
+        # Check if dates are in correct year based on filename
+        year = int(filename.split('_')[-1].split('.')[0])
+        if not all(date.year == year for date in dates):
+            raise ValueError(f"Time values in {filename} don't match expected year {year}")
 
-        ds.close() 
+        # Read data
+        data = ds[emis_var].values
 
-    # Concatenate data from all files 
-    time = np.concatenate(time_array) # (nyears * 12,) 
-    all_data = np.concatenate(all_data, axis=0)  # (nyears * 12, 90, 144) 
+        # Append to lists
+        time_array.append(dates)
+        all_data.append(data)
+
+        ds.close()
+
+    # Concatenate data from all files
+    time = np.concatenate(time_array) # (nyears * 12,)
+    all_data = np.concatenate(all_data, axis=0) # (nyears * 12, 90, 144)
 
     return all_data, lon, lat
                   
@@ -846,7 +854,7 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             total_value, longitude, latitude = read_lightning_data(
                 files=file_paths, upscaled=True
             )
-        case "GFED4s_emis":
+        case "GFED4s_Yearly":
             total_value, longitude, latitude = read_gfed4s_emis(
                 files=file_paths, upscaled=True
             )
