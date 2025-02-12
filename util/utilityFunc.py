@@ -83,6 +83,10 @@ def handle_model_units(data_array, units):
 
     # Dictionary of unit handlers
     unit_handlers = {
+        'kg CO2n m-2 s-1': {
+            'needs_area': True,
+            'new_units': 'kg CO2/s'  # After integrating over area
+        },
         'kg/m2/s': {
             'needs_area': True,
             'new_units': 'kg/s'
@@ -97,19 +101,34 @@ def handle_model_units(data_array, units):
         }
     }
 
-    for unit_pattern, handler in unit_handlers.items():
-        if unit_pattern in units:
-            if handler.get('needs_area', False):
-                if grid_cell_area is None:
-                    grid_cell_area = calculate_grid_area(
-                        data_array.shape,
-                        units='m^2'
-                    )
-                data_array = data_array * grid_cell_area
-            if handler.get('scaling'):
-                data_array = data_array * handler['scaling']
-            new_units = handler['new_units']
-            break
+    # Check exact match first
+    if units in unit_handlers:
+        handler = unit_handlers[units]
+    else:
+        # Generic handling based on unit patterns
+        if any(pattern in units for pattern in ['kg', 'm-2', 's-1']):
+            # Mass flux handling
+            handler = {
+                'needs_area': True,
+                'new_units': 'kg/s'
+            }
+        else:
+            # Default handling
+            handler = {
+                'scaling': 1.0,
+                'new_units': units
+            }
+
+    if handler.get('needs_area', False):
+        if grid_cell_area is None:
+            grid_cell_area = calculate_grid_area(
+                data_array.shape,
+                units='m^2'
+            )
+        data_array = data_array * grid_cell_area
+    if handler.get('scaling'):
+        data_array = data_array * handler['scaling']
+    new_units = handler['new_units']
 
     return data_array, new_units
 
@@ -269,6 +288,38 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
 
     return total_data_array, longitudes, latitudes
 
+
+def read_gfed4s_emis(files, upscaled=False):
+    """
+    Reads GFED4s emissions processed as ModelE input,
+    calculates the annual total emissions, and returns the data as xarray.DataArray
+    """
+    emissions_list = []
+    time_array = []
+
+    for file_path in files:
+        attribute_dict = {}
+        # Open the HDF5 file using h5py
+        with h5py.File(file_path, "r") as h5file:
+            # Load lat and lon for constructing the xarray dataset
+            lat = h5file["lat"][:]
+            lon = h5file["lon"][:]
+                  
+     try:         
+         ann_sum = np.zeros((config['nlat'], config['nlon']), dtype=float)
+         with nc.Dataset(obs_filepath) as f_obs:
+             for k in range(12):
+                 GFED_data = f_obs.variables['CO2n'][k, :, :]  # [kg m-2 s-1]
+                 GFED_CO2 = GFED_data.reshape(config['nlat'], config['nlon'])
+                 GFED_CO2 = np.where(GFED_CO2 <= 0., zero_mat, GFED_CO2)
+                 ndays = calendar.monthrange(year, k+1)[1]
+                 ann_sum += (GFED_CO2 * ndays * s_in_day)  # kgCO2 m-2 M-1
+                  
+             ann_sum *= kgtog  # gCO2 m-2 yr-1
+             tot_GFED = np.nansum(ann_sum * axyp)  # gCO2 yr-1
+             tot_GFED = format(tot_GFED, '.3e')
+                  
+    return total_emis_all_years, lon, lat
 
 def read_gfed4s(files, upscaled=False):
     """

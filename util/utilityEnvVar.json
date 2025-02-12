@@ -18,6 +18,18 @@
           "label": "ModelE CO2 Emissions",
           "cbarmax": null 
         }
+      },
+      {
+        "folder_path": "/discover/nobackup/projects/giss/prod_input_files/emis/CO2n/CMIP6_NATBB_v1.2_2.0x2.5",
+        "file_type": "GFED4s_Yearly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "g",
+          "marker": "x",
+          "line_style": "-",
+          "label": "GFED4s CO2 Emissions",
+          "cbarmax": null 
+        }
       }
     ]
   }
