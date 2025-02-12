@@ -2,6 +2,7 @@ import traceback
 import rasterio
 from os import listdir, makedirs, remove, mkdir
 from os.path import isfile, join, basename, exists, dirname
+import os
 import re
 from rasterio.transform import from_origin
 import rioxarray as riox
@@ -298,14 +299,14 @@ def read_gfed4s_emis(files, upscaled=False):
     Returns 
     ------- 
     tuple
-       - 'all_data': emissions data array (nyears * 12, 90, 144)
+       - 'all_data': xarray data array (time, 90, 144)
        - 'lon': longitude array (144,) 
        - 'lat': latitude array (90,) 
     """
 
     #Initialize lists to store data from each file
     all_data = []
-    time_array = []
+    all_years = []
 
     #Read first file to get dimensions
     ds = xr.open_dataset(files[0], decode_times=False)
@@ -315,31 +316,52 @@ def read_gfed4s_emis(files, upscaled=False):
     #Find the emissions variable (first non-coordinated variable)
     data_vars = list(ds.data_vars)
     emis_var = data_vars[0]
+    print(ds[emis_var].shape)
+
+    # Get units and other attributed from the first file
+    attrs = ds[emis_var].attrs
     ds.close()
+
+    # Sort files to ensure chronological order
+    files.sort()
 
     # Loop over all files
     for filename in files:
+        #extract year from filename
+        year = int(os.path.basename(filename).split('.')[0])
+
         ds = xr.open_dataset(filename, decode_times=False)
-
-        # Get time values (months since 1750-01)
-        time = ds.time.values
-
-        # Read data
         data = ds[emis_var].values
 
-        # Append to lists
-        time_array.append(time)
+        # Append the entire data array
         all_data.append(data)
+        # Add year for each month
+        all_years.extend([year] * 12)
 
         ds.close()
 
-    # Concatenate data from all files
-    all_data = np.concatenate(all_data, axis=0) # (nyears * 12, 90, 144)
+    # Convert lists to arrays
+    all_data = np.concatenate(all_data) # (nyears * 12, 90, 144)
+    all_years = np.array(all_years)
+    print(f"Data shape: {all_data.shape}")
+    print(f"Years shape: {all_years.shape}")
+    print(f"Lat shape: {lat.shape}")
+    print(f"Lon shape: {lon.shape}")
 
-    return all_data, lon, lat
+    # Create xarray DataArray
+    total_value = xr.DataArray(
+            all_data,
+            dims=['time', 'lat', 'lon'],
+            coords={
+                'time': all_years,
+                'lat': lat,
+                'lon': lon
+            },
+            attrs=attrs
+        )
+
+    return total_value, lon, lat
                   
-    return total_emis_all_years, lon, lat
-
 def read_gfed4s(files, upscaled=False):
     """
     Reads multiple HDF5 files using h5py, calculates the annual burned area,
