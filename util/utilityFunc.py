@@ -970,12 +970,14 @@ def obtain_time_series_xarray(
     # Get time values
     time_values = total_value.coords["time"].values
     years = np.unique(time_values)
+    start_year = years[0]
+    end_year = years[-1]
 
     # Check if we have monthly data
     is_monthly = len(total_data_array) > len(years)
 
     if is_monthly:
-        print(f"Found monthly data ({len(total_data_array)} month for {len(years)} years)")
+        print(f"Found monthly data ({len(total_data_array)} months for {len(years)} years)")
         if annual:
             print("Aggregating to annual totals")
             # Reshape to (nyears, 12) and sum over months
@@ -985,7 +987,10 @@ def obtain_time_series_xarray(
         else:
             print("Keeping monthly resolution")
             # For monthly data create decimal years (e.g. 2009.0, 2009.083, ...)
-            time_values = time_values.astype(float)
+            # Create months array from 0 to 11
+            months = np.arrange(12)
+            # Creare decimal years by adding month fractions to each year
+            time_values = start_year + months/12 
 
     print(f"Time values shape: {time_values.shape}")
     print(f"Total data array shape: {total_data_array.shape}")
@@ -999,8 +1004,8 @@ def obtain_time_series_xarray(
         longitude,
         latitude,
         units,
-        start_year,
-        end_year,
+        int(start_year),
+        int(end_year),
     )
 
 
@@ -1054,7 +1059,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             NetCDF_folder_Path=folder_path,
             NetCDF_Type=file_type,
             variables=variables,
-            annual=annual
+            annual=False
         )
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
