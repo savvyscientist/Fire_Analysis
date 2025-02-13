@@ -930,10 +930,6 @@ def obtain_time_series_xarray(
     # Calculate the mean burned area over the decade
     time_mean_data = total_value.mean(dim="time")
 
-    # Calculate total burned area for each year from GFED4s data
-    # this is fine for BA which is in units of m^2 or km^2, but is not OK
-    # for density variables like flash density or pollutant concentration
-    # which is reported in #/m^2 or #/km^2
     # To fix for all variables that have an area unit dependancy in the units:
     # (total_value*area_matrix).sum(dim=sum_dimension).values
     # but make the units need to be revised accordingly and are not area dependant any more
@@ -946,23 +942,17 @@ def obtain_time_series_xarray(
     units = total_value.attrs["units"]
     print(f"Units: {units}")
     # For model E data display on the figure weather the scaling factor has been multiplied
-    # Calculate climatological total over the time dimension
-    time_total_data = total_value.sum(dim=time_dimension)
+
+    # Calculate spatial sums based on units 
     if "m2" in units.lower() or "m^2".lower() in units:
-        # Calculate the lat-lon total over the climatological period
         total_data_array = total_value.sum(dim=sum_dimensions).values
-        # Convert m^2 to mega hectors
-        # print(f"Multiplied the M2TOMHA for {NetCDF_Type}")
     elif " m-2".lower() in units or " m^-2".lower() in units:
-        # Calculate the lat-lon total over the climatological period
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
         grid_cell_area = calculate_grid_area(
             grid_area_shape=grid_cell_dimension_shape, units="m^2"
         )
-        time_total_data *= grid_cell_area
         total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
         print("Data Array multiplied by grid_cell_area")
-    # Review cases that work for fractions
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
         print("Regular Sum Implemented")
@@ -988,14 +978,14 @@ def obtain_time_series_xarray(
             print("Keeping monthly resolution")
             # For monthly data create decimal years (e.g. 2009.0, 2009.083, ...)
             # Create months array from 0 to 11
-            months = np.arrange(12)
+            months = np.arange(12)
             # Creare decimal years by adding month fractions to each year
-            time_values = start_year + months/12 
+            time_values = np.array([year + month/12 for year in years for month in np.arange(12)])
 
     print(f"Time values shape: {time_values.shape}")
     print(f"Total data array shape: {total_data_array.shape}")
 
-    data_per_year_stack = np.column_stack((years, total_data_array))
+    data_per_year_stack = np.column_stack((time_values, total_data_array))
     print(f"Final stacked shape: {data_per_year_stack.shape}")
 
     return (
