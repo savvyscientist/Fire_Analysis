@@ -485,102 +485,86 @@ def days_to_months(month, year):
 def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False):
     """
     Reads ModelE data for given variables
-
-    Parameters:
-    startyear (int): The starting year.
-    endyear (int): The ending year.
-    simname (str): The simulation name to match the file format (default 'nk_CCycle_E6obioF40').
-    ModelE_path (str): The directory containing ModelE output.
-
-    Returns:
-    np.ndarray: A 2D array (year, modelE_BA), where modelE_BA is the sum of BA_tree, BA_shrub, and BA_grass.
     """
 
     # Initialized a litst to store each year's dataset
-    datasets = []
-    zero_mat = np.zeros((90, 144), dtype=float)
+    all_data = []
+    all_years = []
 
-    # Goal: calculate annual total instead of ANN files
-    # for loop over years available within file_path (e.g. there are monthly files JAN2000-DEC2012)
-    # so years are 2000-2012
-    # for loop over JAN-DEC
-    year_dictionary = {}
     # Loop over each file and process it
     for file_path in files:
-        # print(file_path)
         ds = xr.open_dataset(file_path)
         attribute_dict = {}
-        # Add a time coordinate based on the year from the file name
-        # year = int(file_path.split("ANN")[1][:4])
         # TO DO: instead of hard codeing the 90,144 in the shape of modelE_var_data
         # can you read it from the model file?
         # this is important because the next version of the model will be 180x360 so this script
         # will fail with it.
         modelE_var_data = np.zeros(shape=(90, 144))
+        # Sum up all requested variables
         for variable in variables:
             # where function replaces values that do not meet the parameters condition
             # (replaces all values that are not greater than 0)
             var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
-
             modelE_var_data = modelE_var_data + var_data
 
-            for attr_name in ds[variable].attrs:
-                attribute_dict[attr_name] = getattr(ds[variable], attr_name)
+            # Get attributes from the first variable
+            if not attribute_dict:
+               for attr_name in ds[variable].attrs:
+                   attribute_dict[attr_name] = getattr(ds[variable], attr_name)
+               # Extract scaling factor from units
+               units = attribute_dict.get('units', '')
+               scaling_factor, units = extract_scaling_factor(units)
+               attribute_dict['units'] = units
+        # Apply scaling factor
+        modelE_var_data *= scaling_factor
 
-        print(monthly)
-        print(file_path.split("."))
-        year = (
-            int(file_path.split(".")[0][-4:])
-            if monthly
-            else int(file_path.split("ANN")[1][:4])
-        )
+        year = int(file_path.split(".")[0][-4:]) if monthly else int(file_path.split("ANN")[1][:4])
+
         if monthly:
-            month = file_path.split(".")[0][-7:-4] if monthly else None
-            months_seconds = (
-                29 * DAYS_TO_SECONDS
-                if month == "FEB" and leap_year_check(year)
-                else MONTHLISTDICT[month] * DAYS_TO_SECONDS
+            # Get month from filename (e.g. JAN, FEB, etc.)
+            month = file_path.split(".")[0][-7:-4]
+            # Convert month name to number (1-12)
+            month_num = MONTHLIST.index(month) + 1
+
+            # Calculate second in this month
+            days_in_month = days_to_months(str(month_num).zfill(2), year)
+            seconds_in_month = days_in_month * DAYS_TO_SECONDS
+
+            # Apply monthly scaling
+            modelE_var_data = modelE_var_data * seconds_in_month
+
+        else:
+            # For annual data, multiply by seconds in year
+            modelE_var_data *= SECONDS_IN_A_YEAR
+        # Append data and time information
+        all_data.append (modelE_var_data)
+        all_years.append(year)
+
+    # Convert lists to arrays
+    all_data = np.array(all_data)
+    all_years = np.array(all_years)
+
+    # Handle units conversion
+    modelE_all_year = xr.DataArray(
+            all_data,
+            dims=['time', 'lat', 'lon'],
+            coords={
+                'time': all_years,
+                'lat': ds['lat'].values,
+                'lon': ds['lon'].values
+                },
+            attrs=attribute_dict
             )
 
-            if year in year_dictionary:
-                year_dictionary[year] += modelE_var_data * months_seconds
-            else:
-                year_dictionary[year] = modelE_var_data * months_seconds
-        else:
-            modelE_var_data *= SECONDS_IN_A_YEAR
-
-        modelE_var_data = modelE_var_data.expand_dims(
-            time=[year]
-        )  # Add time dimension for each year
-
-        # Append the processes dataset to the list
-        datasets.append(modelE_var_data)
-    year_dictionary = dict(sorted(year_dictionary.items()))
     #1E6 converts from 1/m^2 to 1/km^2 and 1E-10 taken from the unit factor of CtoG and Flash
     #this introduces a bug if we apply read_modelE to variables other than CtoG and Flash
     #unit_convert = 1E6 * 1E-10
     #unit_convert = 1.
     # Concatenate all datasets along the 'time' dimension
-    if monthly:
-        for year in year_dictionary.keys():
-            data, new_units = handle_units(
-                    year_dictionary[year],
-                    attribute_dict.get('units',''))
-            year_dictionary[year] = data.expand_dims(time=[year])
-            attribute_dict['units'] = new_units
-        modelE_all_year = xr.concat(year_dictionary.values(), dim="time")
-    else:
-        modelE_all_year = xr.concat(datasets, dim="time")
-        modelE_all_year, new_units = handle_units(
-            modelE_all_year,
-            attribute_dict.get('units','')
-        )
-        attribute_dict["units"] = new_units
 
-    modelE_all_year.attrs = attribute_dict
-    modelE_lons = ds["lon"]
-    modelE_lats = ds["lat"]
-    return modelE_all_year, modelE_lons, modelE_lats
+    modelE_all_year, new_units = handle_units(modelE_all_year,attribute_dict.get('units',''))
+    modelE_all_year.attrs["units"] = new_units
+    return modelE_all_year, ds["lon"], ds["lat"]
 
 
 def read_lightning_data(files, yearly=True, upscaled=False):
