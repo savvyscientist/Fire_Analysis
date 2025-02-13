@@ -67,7 +67,7 @@ def extract_scaling_factor(units):
     except:
         return 1.0, units  # Default scaling factor is 1 if not specified
 
-def handle_model_units(data_array, units):
+def handle_units(data_array, units):
     """
     Apply appropriate scaling based on variable units.
    
@@ -86,7 +86,11 @@ def handle_model_units(data_array, units):
     unit_handlers = {
         'kg CO2n m-2 s-1': {
             'needs_area': True,
-            'new_units': 'kg CO2/s'  # After integrating over area
+            'new_units': 'kg/s'  # After integrating over area
+        },
+        'kg m-2 s-1': {
+            'needs_area': True,
+            'new_units': 'kg/s'  # After integrating over area
         },
         'kg/m2/s': {
             'needs_area': True,
@@ -535,7 +539,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
     # Concatenate all datasets along the 'time' dimension
     if monthly:
         for year in year_dictionary.keys():
-            data, new_units = handle_model_units(
+            data, new_units = handle_units(
                     year_dictionary[year],
                     attribute_dict.get('units',''))
             year_dictionary[year] = data.expand_dims(time=[year])
@@ -543,7 +547,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         modelE_all_year = xr.concat(year_dictionary.values(), dim="time")
     else:
         modelE_all_year = xr.concat(datasets, dim="time")
-        modelE_all_year, new_units = handle_model_unita(
+        modelE_all_year, new_units = handle_units(
             modelE_all_year,
             attribute_dict.get('units','')
         )
@@ -882,21 +886,7 @@ def obtain_time_series_xarray(
     NetCDF_Type,
 ):
     """
-    Calculates the decade mean burned area (BA) and the interannual variability of BA
-    from 2002 to 2012 using read_gfed4s and read_ModelEBA.
-
-    Parameters:
-    startyear (int): The start year of the period (default 2002).
-    endyear (int): The end year of the period (default 2012).
-    GFED_path (str): The directory containing the GFED4s files.
-    ModelE_path (str): The directory containing ModelE output.
-    simname (str): The simulation name for ModelE data.
-
-    Returns:
-    tuple: A tuple containing:
-      - decade_mean_gfed4sba (xarray.DataArray): The mean burned area over the decade (lat, lon array).
-      - gfed4sba_per_year (np.ndarray): A 2D array with columns (year, totalBA), where totalBA is the sum of burned area for that year.
-      - modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the total burned area from ModelE.
+    Calculates the mean and the interannual variability
     """
 
     # Call read_gfed4s to load GFED4s data
@@ -932,7 +922,6 @@ def obtain_time_series_xarray(
         # Calculate the lat-lon total over the climatological period
         total_data_array = total_value.sum(dim=sum_dimensions).values
         # Convert m^2 to mega hectors
-        total_data_array = total_data_array
         # print(f"Multiplied the M2TOMHA for {NetCDF_Type}")
     elif " m-2".lower() in units or " m^-2".lower() in units:
         # Calculate the lat-lon total over the climatological period
@@ -951,8 +940,23 @@ def obtain_time_series_xarray(
     start_year = int(total_value.coords["time"].values[0])
     end_year = int(total_value.coords["time"].values[-1])
     print(start_year, end_year)
-    years = np.arange(start_year, end_year + 1)
+    print(f"Start year: {start_year}, End year: {end_year}")
+    print(f"total_data_array shape: {total_data_array.shape}")
+    # Handle monthly data
+    if len(total_data_array) == 12: # Monthly data
+       # Create array [1,2,3...12] for months
+       months = np.arange(1, 13)
+       # Create decimal years (e.g., 2009.0, 2009.083, 2009.167, etc.)
+       years = start_year + (months - 1) / 12
+       print(f"Created years array for monthly data: {years}")
+    else:
+       years = np.arange(start_year, end_year + 1) # Yearly data
+       print(f"Created years array for yearly data: {years}")
+        
+    print(f"Years shape: {years.shape}")
+    print(f"Total data array shape: {total_data_array.shape}")
     data_per_year_stack = np.column_stack((years, total_data_array))
+    print(f"Final stacked shape: {data_per_year_stack.shape}")
 
     return (
         time_mean_data,
