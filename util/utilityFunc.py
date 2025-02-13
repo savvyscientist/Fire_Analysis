@@ -324,7 +324,17 @@ def read_gfed4s_emis(files, upscaled=False):
 
     # Get units and other attributed from the first file
     attrs = ds[emis_var].attrs
+    units = attrs.get('units','')
     ds.close()
+
+    # Create grid cell area if dealing with per-are units
+    if any(pattern in units for pattern in ['kg m-2 s-1', 'kg/m2/s']):
+        grid_cell_area = calculate_grid_area(
+                grid_area_shape=(lat.size, lon.size),
+                units='m^2'
+                )
+    else:
+        grid_cell_area = None
 
     # Sort files to ensure chronological order
     files.sort()
@@ -337,20 +347,34 @@ def read_gfed4s_emis(files, upscaled=False):
         ds = xr.open_dataset(filename, decode_times=False)
         data = ds[emis_var].values
 
-        # Append the entire data array
-        all_data.append(data)
-        # Add year for each month
-        all_years.extend([year] * 12)
+        # Process each month
+        for month in range(12):
+            month_data = data[month, :, :]
+            
+            # Convert units if needed
+            #1. If per area units, multiply by grid cell area
+            if grid_cell_area is not None:
+                month_data = month_data * grid_cell_area # Convert from flux per area to total flux
+
+            #2. Convert from per second to per month by multiplying with second in month
+            days_in_month = days_to_months(str(month+1).zfill(2), year)
+            seconds_in_month = days_in_month * DAYS_TO_SECONDS
+            month_data = month_data * seconds_in_month
+
+            # Append the entire data array
+            all_data.append(month_data)
+            # Add year for each month
+            all_years.append(year)
 
         ds.close()
 
-    # Convert lists to arrays
-    all_data = np.concatenate(all_data) # (nyears * 12, 90, 144)
+    # Convert lists to arrays and reshape to proper dimensions
+    all_data = np.array(all_data) # (time,lat,lon)
     all_years = np.array(all_years)
-    print(f"Data shape: {all_data.shape}")
-    print(f"Years shape: {all_years.shape}")
-    print(f"Lat shape: {lat.shape}")
-    print(f"Lon shape: {lon.shape}")
+
+    # Update units in attributes
+    if grid_cell_area is not None:
+        attrs['units'] = 'kg/yr' 
 
     # Create xarray DataArray
     total_value = xr.DataArray(
@@ -884,6 +908,7 @@ def obtain_time_series_xarray(
     variables,
     NetCDF_folder_Path,
     NetCDF_Type,
+    annual=True
 ):
     """
     Calculates the mean and the interannual variability
@@ -891,12 +916,17 @@ def obtain_time_series_xarray(
 
     # Call read_gfed4s to load GFED4s data
     file_paths = obtain_netcdf_files(NetCDF_folder_Path)
+    print(f"\nProcessing {NetCDF_Type}...")
     total_value, longitude, latitude = handle_time_extraction_type(
         file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type
     )
 
     time_dimension = total_value.dims[0]
     sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
+    # Debug prints
+    print(f"Time dimension: {time_dimension}")
+    print(f"Time values: {total_value.coords['time'].values}")
+
     # Calculate the mean burned area over the decade
     time_mean_data = total_value.mean(dim="time")
 
@@ -914,7 +944,7 @@ def obtain_time_series_xarray(
     # total_data_array = total_value.sum(dim=sum_dimension).values
 
     units = total_value.attrs["units"]
-    print(units)
+    print(f"Units: {units}")
     # For model E data display on the figure weather the scaling factor has been multiplied
     # Calculate climatological total over the time dimension
     time_total_data = total_value.sum(dim=time_dimension)
@@ -937,24 +967,29 @@ def obtain_time_series_xarray(
         total_data_array = total_value.sum(dim=sum_dimensions).values
         print("Regular Sum Implemented")
 
-    start_year = int(total_value.coords["time"].values[0])
-    end_year = int(total_value.coords["time"].values[-1])
-    print(start_year, end_year)
-    print(f"Start year: {start_year}, End year: {end_year}")
-    print(f"total_data_array shape: {total_data_array.shape}")
-    # Handle monthly data
-    if len(total_data_array) == 12: # Monthly data
-       # Create array [1,2,3...12] for months
-       months = np.arange(1, 13)
-       # Create decimal years (e.g., 2009.0, 2009.083, 2009.167, etc.)
-       years = start_year + (months - 1) / 12
-       print(f"Created years array for monthly data: {years}")
-    else:
-       years = np.arange(start_year, end_year + 1) # Yearly data
-       print(f"Created years array for yearly data: {years}")
-        
-    print(f"Years shape: {years.shape}")
+    # Get time values
+    time_values = total_value.coords["time"].values
+    years = np.unique(time_values)
+
+    # Check if we have monthly data
+    is_monthly = len(total_data_array) > len(years)
+
+    if is_monthly:
+        print(f"Found monthly data ({len(total_data_array)} month for {len(years)} years)")
+        if annual:
+            print("Aggregating to annual totals")
+            # Reshape to (nyears, 12) and sum over months
+            monthly_totals = total_data_array.reshape(len(years), 12)
+            total_data_array = monthly_totals.sum(axis=1)
+            time_values = years
+        else:
+            print("Keeping monthly resolution")
+            # For monthly data create decimal years (e.g. 2009.0, 2009.083, ...)
+            time_values = time_values.astype(float)
+
+    print(f"Time values shape: {time_values.shape}")
     print(f"Total data array shape: {total_data_array.shape}")
+
     data_per_year_stack = np.column_stack((years, total_data_array))
     print(f"Final stacked shape: {data_per_year_stack.shape}")
 
@@ -969,7 +1004,20 @@ def obtain_time_series_xarray(
     )
 
 
-def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
+def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=True):
+    """
+    Run time series analysis for multiple datasets
+    Parameters
+    _________
+    folder_data_list : list
+       List of folder data dictionaries
+    time_analysis_figure_data : dict
+       Figure metadata and settings
+    annual : bool, optional
+       If True, show annual totals for data
+       If False, show monthly resolution data points 
+       Default is True
+    """
     # Plot side by side maps for GFED and ModelE
     _, time_analysis_axis = plt.subplots(figsize=(10, 6))
 
@@ -1006,6 +1054,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data):
             NetCDF_folder_Path=folder_path,
             NetCDF_Type=file_type,
             variables=variables,
+            annual=annual
         )
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
