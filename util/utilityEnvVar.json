@@ -8,26 +8,38 @@
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km/monthly/test",
+        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEclean/test",
         "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
+        "variables": ["CO2n_PEAT_CMIP6_src"],
         "figure_data": {
-          "color": "g",
+          "color": "b",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE CO2 Emissions",
+          "label": "Prescribed peat CO2 Emissions",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/projects/giss/prod_input_files/emis/CO2n/CMIP6_NATBB_v1.2_2.0x2.5",
-        "file_type": "GFED4s_Yearly",
-        "variables": ["CO2n"],
+        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEpeat/test",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_pyrEpeat_src"],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "pyrE peat CO2 Emissions (nBB=1)",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEpeatnBB0/test",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_pyrEpeat_src"],
         "figure_data": {
           "color": "g",
-          "marker": "x",
+          "marker": ".",
           "line_style": "-",
-          "label": "GFED4s CO2 Emissions",
+          "label": "pyrE peat CO2 Emissions (nBB=0)",
           "cbarmax": null 
         }
       }

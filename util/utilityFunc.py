@@ -126,11 +126,19 @@ def handle_units(data_array, units):
 
     if handler.get('needs_area', False):
         if grid_cell_area is None:
+            # Get spatial dimensions only (-2 and -1)
+            spatial_shape = data_array.shape[-2:]
             grid_cell_area = calculate_grid_area(
-                data_array.shape,
+                grid_area_shape=spatial_shape,
                 units='m^2'
             )
+            # Expand dimensions if needed for broadcasting
+            if len(data_array.shape) > 2:
+                # Add any leading dimensions (e.g., time)
+                for _ in range(len(data_array.shape) - 2):
+                    grid_cell_area = grid_cell_area[np.newaxis, ...]
         data_array = data_array * grid_cell_area
+
     if handler.get('scaling'):
         data_array = data_array * handler['scaling']
     new_units = handler['new_units']
