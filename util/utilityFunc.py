@@ -97,7 +97,7 @@ def handle_units(data_array, units):
             'new_units': 'kg/s'
         },
         'm-2 s-1': {
-            'scaling': KM_NEG_2TOM_2 * SECONDS_IN_A_YEAR,  
+            'scaling': KM_SQUARED_TO_M_SQUARED,  
             'new_units': 'km-2 yr-1'
         },
         '/m2': {
@@ -589,10 +589,6 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
             attrs=attribute_dict
             )
 
-    #1E6 converts from 1/m^2 to 1/km^2 and 1E-10 taken from the unit factor of CtoG and Flash
-    #this introduces a bug if we apply read_modelE to variables other than CtoG and Flash
-    #unit_convert = 1E6 * 1E-10
-    #unit_convert = 1.
     # Concatenate all datasets along the 'time' dimension
 
     modelE_all_year, new_units = handle_units(modelE_all_year,attribute_dict.get('units',''))
@@ -725,23 +721,17 @@ def define_subplot(
     ax.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=1)
 
     ax.set_title(title, fontsize=10, pad=1)
-    props = dict(boxstyle="round", facecolor="lightgray", alpha=0.5)
-    (
-        (
-            ax.text(
+    # Add global total text as a normal line below the title
+    if glob is not None:
+        ax.text(
                 0.5,
                 1.07,
                 f"Global Total: {glob}",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
-                bbox=props,
                 fontsize=10,
-            )
         )
-        if glob
-        else None
-    )
 
     # Handling difference normalization (if is_diff is true)
     if is_diff:
