@@ -97,7 +97,7 @@ def handle_units(data_array, units):
             'new_units': 'kg/s'
         },
         'm-2 s-1': {
-            'needs_area': True,
+            'scaling': KM_NEG_2TOM_2 * SECONDS_IN_A_YEAR,  
             'new_units': 'km-2 yr-1'
         },
         '/m2': {
@@ -152,6 +152,17 @@ def handle_units(data_array, units):
 
 
 def calculate_grid_area(grid_area_shape, units="km"):
+    """
+    Calculate the area of each grid cell based on grid dimensions.
+
+    Parameters:
+    grid_area_shape (tuple): Shape of the grid (nlat,nlon)
+    units (str): Units for the calculation ("km or m")
+
+    Returns:
+    np.ndarray: Grid area matrix with diensions matching grid_area_shape
+    """
+
     # Grid resolution
     nlat = grid_area_shape[0]  # Number of latitude bands
     nlon = grid_area_shape[1]  # Number of longitude bands
@@ -497,6 +508,17 @@ def days_to_months(month, year):
 def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False):
     """
     Reads ModelE data for given variables
+
+    Parameters:
+    files (list): List of file paths to ModelE data files
+    variables (list): List of variable names to read and sum
+    monthly (bool): If True, process as monthly data; otherwise, as annual
+
+    Returns:
+    tuple: (data_array, longitude, latitude)
+    - data_array: xarray DataArray with Dimensions [time, lat, lon]
+    - longitude: array of longitude values
+    - latitude: array of latitude values
     """
 
     # Initialized a litst to store each year's dataset
@@ -507,11 +529,10 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
     for file_path in files:
         ds = xr.open_dataset(file_path)
         attribute_dict = {}
-        # TO DO: instead of hard codeing the 90,144 in the shape of modelE_var_data
-        # can you read it from the model file?
-        # this is important because the next version of the model will be 180x360 so this script
-        # will fail with it.
-        modelE_var_data = np.zeros(shape=(90, 144))
+        # Read dimension sizes dynamically from the dataset
+        lat_size = len(ds['lat'])
+        lon_size = len(ds['lon'])
+        modelE_var_data = np.zeros(shape=(lat_size, lon_size))
         # Sum up all requested variables
         for variable in variables:
             # where function replaces values that do not meet the parameters condition
