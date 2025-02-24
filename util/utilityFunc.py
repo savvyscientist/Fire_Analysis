@@ -97,8 +97,10 @@ def handle_units(data_array, units):
             'new_units': 'kg/s'
         },
         'm-2 s-1': {
-            'scaling': KM_SQUARED_TO_M_SQUARED,  
-            'new_units': 'km-2 yr-1'
+            'scaling': 1.,  
+            'new_units': 'm-2 yr-1'
+            #'scaling': KM_SQUARED_TO_M_SQUARED,  
+            #'new_units': 'km-2 yr-1'
         },
         '/m2': {
             'scaling': 1E6 * 1E-10,  # For flash counts
@@ -720,18 +722,12 @@ def define_subplot(
     ax.add_feature(cfeature.LAND, edgecolor="gray")
     ax.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=1)
 
-    ax.set_title(title, fontsize=10, pad=15)
-    # Add global total text as a normal line below the title
+    # Creare a two-line title if global total is provided 
     if glob is not None:
-        ax.text(
-                0.5,
-                0.99,
-                f"Global Total: {glob}",
-                ha="center",
-                va="top",
-                transform=ax.transAxes,
-                fontsize=9,
-        )
+        two_line_title = f"{title}\nGlobal Total: {glob}"
+        ax.set_title(two_line_title, fontsize=10, pad=15)
+    else:
+        ax.set_title(title, fontsize=10, pad=5)
 
     # Handling difference normalization (if is_diff is true)
     if is_diff:
@@ -800,6 +796,7 @@ def map_plot(
     cbarmax,
     is_diff=False,
     logMap=False,
+    variables=None,
 ):
     """
     Plots the decadal mean burned area of both GFED and ModelE side by side.
@@ -830,6 +827,23 @@ def map_plot(
     else:
         # Default case for other units
         global_total = f"{decade_data.sum():.3e} {units}"
+
+    if variables is not None:
+        # Set specific cbarmax
+        if any('fireCount' in var for var in variables):
+            #cbarmax = 0.2
+            cbarmax = 0.3 * decade_data.max()
+        elif any ('CtoG' in var for var in variables):
+            cbarmax = 0.01
+        elif any ('BA_' in var for var in variables):
+            if decade_data.max() > 0:
+                cbarmax = 0.3 * decade_data.max()
+    # If cbarmax is still None or too hight relative to the data, adjust it
+    if cbarmax is None or (not is_diff and cbarmax > 0.9 * decade_data.max()):
+        if decade_data.max() > 0:
+            cbarmax = 0.3 * decade_data.max()
+        else:
+            cbarmax = 1.0 # Default fallback
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
     # GFED4s decadal mean map
