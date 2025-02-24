@@ -720,17 +720,17 @@ def define_subplot(
     ax.add_feature(cfeature.LAND, edgecolor="gray")
     ax.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=1)
 
-    ax.set_title(title, fontsize=10, pad=1)
+    ax.set_title(title, fontsize=10, pad=15)
     # Add global total text as a normal line below the title
     if glob is not None:
         ax.text(
                 0.5,
-                1.07,
+                0.99,
                 f"Global Total: {glob}",
                 ha="center",
-                va="center",
+                va="top",
                 transform=ax.transAxes,
-                fontsize=10,
+                fontsize=9,
         )
 
     # Handling difference normalization (if is_diff is true)
@@ -826,7 +826,7 @@ def map_plot(
         base_unit = units.replace("m-2", "").replace("m^-2","").replace("/m2","").strip()
         if not base_unit:
             base_unit = "units"
-            global_total = f"{weighted_total:.3e} {base_unit}"
+        global_total = f"{weighted_total:.3e} {base_unit}"
     else:
         # Default case for other units
         global_total = f"{decade_data.sum():.3e} {units}"
