@@ -2,44 +2,32 @@
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
     "time_analysis_figure_data": {
-      "title": "CO2 Emissions",
+      "title": "Active Fires",
       "xlabel": "Yearly",
-      "ylabel": "CO2 Emissions"
+      "ylabel": "Active Fires"
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEclean/test",
+        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40intflampyrE/test",
         "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_PEAT_CMIP6_src"],
+        "variables": ["fireCount"],
         "figure_data": {
           "color": "b",
           "marker": "x",
           "line_style": "-",
-          "label": "Prescribed peat CO2 Emissions",
+          "label": "patch",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEpeat/test",
+        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40intpyrE/test",
         "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_pyrEpeat_src"],
+        "variables": ["fireCount"],
         "figure_data": {
           "color": "r",
           "marker": "o",
           "line_style": "-",
-          "label": "pyrE peat CO2 Emissions (nBB=1)",
-          "cbarmax": null 
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEpeatnBB0/test",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_pyrEpeat_src"],
-        "figure_data": {
-          "color": "g",
-          "marker": ".",
-          "line_style": "-",
-          "label": "pyrE peat CO2 Emissions (nBB=0)",
+          "label": "orig",
           "cbarmax": null 
         }
       }

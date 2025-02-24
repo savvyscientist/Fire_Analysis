@@ -96,6 +96,10 @@ def handle_units(data_array, units):
             'needs_area': True,
             'new_units': 'kg/s'
         },
+        'm-2 s-1': {
+            'needs_area': True,
+            'new_units': 'km-2 yr-1'
+        },
         '/m2': {
             'scaling': 1E6 * 1E-10,  # For flash counts
             'new_units': 'flashes/km2/yr'
