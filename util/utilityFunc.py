@@ -810,6 +810,27 @@ def map_plot(
     """
     print(axis_index, axis_length)
 
+    # Calculate global total based on units
+    global_total = None
+    if "m2" in units.lower() or "m^2" in units.lower():
+        # Simple sum for area units
+        global_total = f"{decade_data.sum():.3e} {units}"
+    elif "m-2" in units.lower() or "m^-2" in units.lower() or "/m2" in units.lower():
+        # Area-weighted for per-area units
+        grid_cell_area = calculate_grid_area(
+                grid_area_shape=decade_data.shape,
+                units="m^2"
+                )
+        weighted_total = (decade_data * grid_cell_area).sum()
+        # Extract base unit by removing area component
+        base_unit = units.replace("m-2", "").replace("m^-2","").replace("/m2","").strip()
+        if not base_unit:
+            base_unit = "units"
+            global_total = f"{weighted_total:.3e} {base_unit}"
+    else:
+        # Default case for other units
+        global_total = f"{decade_data.sum():.3e} {units}"
+
     axis_value = axis if axis_length <= 1 else axis[axis_index]
     # GFED4s decadal mean map
     define_subplot(
@@ -827,6 +848,7 @@ def map_plot(
         clabel=units,
         masx=cbarmax,
         is_diff=is_diff,
+        glob=global_total,
         logMap=logMap,
     )
 
