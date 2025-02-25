@@ -103,7 +103,7 @@ def handle_units(data_array, units, monthly=False, file_path=None, year=None):
         },
         'm-2 s-1': {
             'scaling': 1.,  
-            'new_units': 'm-2 yr-1'
+            'new_units': 'm-2 s-1'
             #'scaling': KM_SQUARED_TO_M_SQUARED,  
             #'new_units': 'km-2 yr-1'
         },
@@ -822,10 +822,7 @@ def map_plot(
 
     # Calculate global total based on units
     global_total = None
-    if "m2" in units.lower() or "m^2" in units.lower():
-        # Simple sum for area units
-        global_total = f"{decade_data.sum():.3e} {units}"
-    elif "m-2" in units.lower() or "m^-2" in units.lower() or "/m2" in units.lower():
+    if "m-2" in units.lower() or "m^-2" in units.lower() or "/m2" in units.lower():
         # Area-weighted for per-area units
         grid_cell_area = calculate_grid_area(
                 grid_area_shape=decade_data.shape,
@@ -854,12 +851,12 @@ def map_plot(
     # If cbarmax is still None or too hight relative to the data, adjust it
     if cbarmax is None or (not is_diff and cbarmax > 0.9 * decade_data.max()):
         if decade_data.max() > 0:
-            cbarmax = 0.3 * decade_data.max()
+            cbarmax = 0.7 * decade_data.max()
         else:
             cbarmax = 1.0 # Default fallback
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
-    # GFED4s decadal mean map
+
     define_subplot(
         figure,
         axis_value,
@@ -988,9 +985,7 @@ def obtain_time_series_xarray(
     print(f"Units: {units}")
 
     # Calculate spatial sums based on units 
-    if "m2" in units.lower() or "m^2".lower() in units:
-        total_data_array = total_value.sum(dim=sum_dimensions).values
-    elif " m-2".lower() in units or " m^-2".lower() in units:
+    if " m-2".lower() in units or " m^-2".lower() in units:
         grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
         grid_cell_area = calculate_grid_area(
             grid_area_shape=grid_cell_dimension_shape, units="m^2"
@@ -1000,6 +995,7 @@ def obtain_time_series_xarray(
     else:
         total_data_array = total_value.sum(dim=sum_dimensions).values
         print("Regular Sum Implemented")
+
 
     # Get time values
     time_values = total_value.coords["time"].values
@@ -1096,7 +1092,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
         )
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
-        # Plot the decadal mean burned area
+        # Plot the preiod mean variable 
         map_plot(
             figure=map_figure,
             axis=map_axis,
@@ -1111,7 +1107,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             logMap=True,
         )
 
-        # Plot the time series of burned area for GFED and ModelE
+        # Plot the time series 
         time_series_plot(
             axis=time_analysis_axis,
             data=data_per_year_stack,
