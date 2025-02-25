@@ -68,13 +68,16 @@ def extract_scaling_factor(units):
         return 1.0, units  # Default scaling factor is 1 if not specified
 
 # Function to convert units
-def handle_units(data_array, units):
+def handle_units(data_array, units, monthly=False, file_path=None, year=None):
     """
     Apply appropriate scaling based on variable units.
    
     Parameters:
         data_array: xarray DataArray
         units: str, unit string from ModelE
+        monthly: bool, whether the data is monthly or annual
+        file_path: str, path to the file (needed for monthly data to extract month)
+        year: int, the year (needed for monthly data to calculate days)
 
     Returns:
         scaled_data: scaled DataArray
@@ -150,6 +153,24 @@ def handle_units(data_array, units):
     if handler.get('scaling'):
         data_array = data_array * handler['scaling']
     new_units = handler['new_units']
+
+    # Apply time scaling
+    if 's-1' in units or '/s' in units:
+        if monthly and file_path and year:
+            # Get month from filename (e.g. JAN, FEB, etc.)
+            month = file_path.split(".")[0][-7:-4]
+            # Convert month name to number (1-12)
+            month_num = MONTHLIST.index(month) + 1
+            # Calculate seconds in this month
+            days_in_month = days_to_months(str(month_num).zfill(2), year)
+            seconds_in_month = days_in_month * DAYS_TO_SECONDS
+            # Apply monthly scaling
+            data_array = data_array * seconds_in_month
+            new_units = new_units.replace('/s', '/month').replace('s-1', 'month-1')
+        else:
+            # For annual data, multiply by seconds in year
+            data_array = data_array * SECONDS_IN_A_YEAR
+            new_units = new_units.replace('/s', '/yr').replace('s-1', 'yr-1')
 
     return data_array, new_units
 
@@ -525,7 +546,7 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
     - latitude: array of latitude values
     """
 
-    # Initialized a litst to store each year's dataset
+    # Initialized a list to store each year's dataset
     all_data = []
     all_years = []
 
@@ -557,35 +578,15 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
 
         year = int(file_path.split(".")[0][-4:]) if monthly else int(file_path.split("ANN")[1][:4])
 
-        # Add a condition, if the variable has units of /s then scale to the number of seconds in the file (month or year)
-        # Scale variable to the number of seconds in a month or a year for ANN files
-        if monthly:
-            # Get month from filename (e.g. JAN, FEB, etc.)
-            month = file_path.split(".")[0][-7:-4]
-            # Convert month name to number (1-12)
-            month_num = MONTHLIST.index(month) + 1
-
-            # Calculate second in this month
-            days_in_month = days_to_months(str(month_num).zfill(2), year)
-            seconds_in_month = days_in_month * DAYS_TO_SECONDS
-
-            # Apply monthly scaling
-            modelE_var_data = modelE_var_data * seconds_in_month
-
-            #revise units to be per month units = 
-
-        else:
-            # For annual data, multiply by seconds in year
-            modelE_var_data *= SECONDS_IN_A_YEAR
         # Append data and time information
-        all_data.append (modelE_var_data)
+        all_data.append(modelE_var_data)
         all_years.append(year)
 
     # Convert lists to arrays
     all_data = np.array(all_data)
     all_years = np.array(all_years)
 
-    # Handle units conversion
+    # Create xarray DataArray
     modelE_all_year = xr.DataArray(
             all_data,
             dims=['time', 'lat', 'lon'],
@@ -597,9 +598,15 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
             attrs=attribute_dict
             )
 
-    # Concatenate all datasets along the 'time' dimension
+    # Handle units conversion and time scaling
+    modelE_all_year, new_units = handle_units(
+        modelE_all_year, 
+        attribute_dict.get('units',''), 
+        monthly=monthly,
+        file_path=files[0] if monthly else None,  # Pass file_path for monthly data
+        year=all_years[0] if monthly else None    # Pass year for monthly data
+    )
 
-    modelE_all_year, new_units = handle_units(modelE_all_year,attribute_dict.get('units',''))
     modelE_all_year.attrs["units"] = new_units
     return modelE_all_year, ds["lon"], ds["lat"]
 
