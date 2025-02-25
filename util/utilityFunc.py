@@ -67,6 +67,7 @@ def extract_scaling_factor(units):
     except:
         return 1.0, units  # Default scaling factor is 1 if not specified
 
+# Function to convert units
 def handle_units(data_array, units):
     """
     Apply appropriate scaling based on variable units.
@@ -74,6 +75,7 @@ def handle_units(data_array, units):
     Parameters:
         data_array: xarray DataArray
         units: str, unit string from ModelE
+
     Returns:
         scaled_data: scaled DataArray
         new_units: str, updated units after scaling
@@ -555,6 +557,8 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
 
         year = int(file_path.split(".")[0][-4:]) if monthly else int(file_path.split("ANN")[1][:4])
 
+        # Add a condition, if the variable has units of /s then scale to the number of seconds in the file (month or year)
+        # Scale variable to the number of seconds in a month or a year for ANN files
         if monthly:
             # Get month from filename (e.g. JAN, FEB, etc.)
             month = file_path.split(".")[0][-7:-4]
@@ -567,6 +571,8 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
 
             # Apply monthly scaling
             modelE_var_data = modelE_var_data * seconds_in_month
+
+            #revise units to be per month units = 
 
         else:
             # For annual data, multiply by seconds in year
@@ -957,7 +963,6 @@ def obtain_time_series_xarray(
     Calculates the mean and the interannual variability
     """
 
-    # Call read_gfed4s to load GFED4s data
     file_paths = obtain_netcdf_files(NetCDF_folder_Path)
     print(f"\nProcessing {NetCDF_Type}...")
     total_value, longitude, latitude = handle_time_extraction_type(
@@ -970,21 +975,10 @@ def obtain_time_series_xarray(
     print(f"Time dimension: {time_dimension}")
     print(f"Time values: {total_value.coords['time'].values}")
 
-    # Calculate the mean burned area over the decade
     time_mean_data = total_value.mean(dim="time")
-
-    # To fix for all variables that have an area unit dependancy in the units:
-    # (total_value*area_matrix).sum(dim=sum_dimension).values
-    # but make the units need to be revised accordingly and are not area dependant any more
-    # if data_units string includes /m^2 or m^-2
-    # somethign like this: match = re.match("m^-2"or"/m^2 ", units) then:
-    # (total_value*area_matrix).sum(dim=sum_dimension).values
-    # else
-    # total_data_array = total_value.sum(dim=sum_dimension).values
 
     units = total_value.attrs["units"]
     print(f"Units: {units}")
-    # For model E data display on the figure weather the scaling factor has been multiplied
 
     # Calculate spatial sums based on units 
     if "m2" in units.lower() or "m^2".lower() in units:
@@ -1079,7 +1073,6 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             folder_data["variables"],
         )
 
-        # Call intann_BA_xarray to calculate decadal mean BA and interannual variability
         (
             time_mean_data,
             data_per_year_stack,
