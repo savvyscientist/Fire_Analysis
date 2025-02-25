@@ -728,7 +728,12 @@ def define_subplot(
     glob=None,
     logMap=False,
 ):
-    masx = 0.7 * decade_data.max() if masx == None else masx
+    """Define the properties of a subplot with optional difference normalization.""" 
+    # Only use default scaling if masx is None 
+    if masx is None: 
+        masx = decade_data.max().item() 
+        print(f"Auto-setting masx to {masx}")
+
     # labelpad sets the distance of the colorbar from the map
     """Define the properties of a subplot with optional difference normalization."""
     ax.coastlines(color="black")
@@ -761,17 +766,12 @@ def define_subplot(
             vmax=masx if not is_diff else None,
         )
     else:
-        norm = None
-        # Mask values less than or equal to zero for the custom colormap (set to white)
-        # masked_data = np.ma.masked_less_equal(data, 0)  # Mask values <= 0
-        # # Create a colormap with white for values <= 0
-        # cmap = plt.get_cmap(cmap).copy()
-        # cmap.set_bad(color="white")  # Set masked values to white
-        logNorm = mcolors.LogNorm(
-            vmin=1 if not is_diff else None, vmax=masx if not is_diff else None
-        )
-        p = (
-            ax.pcolormesh(
+        # For non-difference plots, either use log scale or linear scale
+        if logMap and decade_data.min().item() > 0:
+            # For log plots, ensure vmin is positive
+            vmin = max(decade_data[decade_data > 0].min().item() * 0.9, 1.e-6)
+            logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
+            p = ax.pcolormesh(
                 lons,
                 lats,
                 decade_data,
@@ -779,17 +779,17 @@ def define_subplot(
                 cmap="jet",
                 norm=logNorm,
             )
-            if logMap
-            else ax.pcolormesh(
+        else:
+            # For linear plots, use the full range
+            p = ax.pcolormesh(
                 lons,
                 lats,
                 decade_data,
                 transform=ccrs.PlateCarree(),
                 cmap="jet",
-                vmin=float(0) if not is_diff else None,
-                vmax=float(masx) if not is_diff else None,
+                vmin=0.0,
+                vmax=masx,
             )
-        )
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
@@ -819,6 +819,7 @@ def map_plot(
     decade_mean_modelEba (xarray.DataArray): The decadal mean burned area from ModelE(lat, lon array).
     """
     print(axis_index, axis_length)
+    print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data/max().item():.5e}")
 
     # Calculate global total based on units
     global_total = None
@@ -838,22 +839,23 @@ def map_plot(
         # Default case for other units
         global_total = f"{decade_data.sum():.3e} {units}"
 
+    # Set cbarmax based on variable types if provided
     if variables is not None:
         # Set specific cbarmax
         if any('fireCount' in var for var in variables):
-            #cbarmax = 0.2
-            cbarmax = 0.3 * decade_data.max()
+            cbarmax = decade_data.max().item()
         elif any ('CtoG' in var for var in variables):
             cbarmax = 0.01
         elif any ('BA_' in var for var in variables):
             if decade_data.max() > 0:
-                cbarmax = 0.3 * decade_data.max()
-    # If cbarmax is still None or too hight relative to the data, adjust it
-    if cbarmax is None or (not is_diff and cbarmax > 0.9 * decade_data.max()):
+                cbarmax = decade_data.max().item()
+    # Ensure a reasonable cbarmax value
+    if cbarmax is None or (not is_diff and cbarmax < 0.1 * decade_data.max().item()):
         if decade_data.max() > 0:
-            cbarmax = 0.7 * decade_data.max()
+            cbarmax = decade_data.max().item()
         else:
             cbarmax = 1.0 # Default fallback
+    print(f"Using cbarmax value: {cbarmax}")
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
 
