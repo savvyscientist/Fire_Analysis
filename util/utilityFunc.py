@@ -734,6 +734,9 @@ def define_subplot(
         masx = decade_data.max().item() 
         print(f"Auto-setting masx to {masx}")
 
+    # Mask values that are less than or equal to zero
+    masked_data = np.ma.masked_where(decade_data <= 0, decade_data)
+
     # labelpad sets the distance of the colorbar from the map
     """Define the properties of a subplot with optional difference normalization."""
     ax.coastlines(color="black")
@@ -767,14 +770,19 @@ def define_subplot(
         )
     else:
         # For non-difference plots, either use log scale or linear scale
-        if logMap and decade_data.min().item() > 0:
+        # Get the standard jet colormap
+        cmap = plt.cm.jet.copy()
+        # Set masked values )zerps amd megatives) to white)
+        cmap.set_bad('white')
+
+        if logMap and masked_data.min() > 0:
             # For log plots, ensure vmin is positive
-            vmin = max(decade_data[decade_data > 0].min().item() * 0.9, 1.e-6)
+            vmin = max(masked_data.compressed().min() * 0.9, 1.e-6)
             logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
             p = ax.pcolormesh(
                 lons,
                 lats,
-                decade_data,
+                masked_data,
                 transform=ccrs.PlateCarree(),
                 cmap="jet",
                 norm=logNorm,
@@ -784,7 +792,7 @@ def define_subplot(
             p = ax.pcolormesh(
                 lons,
                 lats,
-                decade_data,
+                masked_data,
                 transform=ccrs.PlateCarree(),
                 cmap="jet",
                 vmin=0.0,
@@ -819,7 +827,7 @@ def map_plot(
     decade_mean_modelEba (xarray.DataArray): The decadal mean burned area from ModelE(lat, lon array).
     """
     print(axis_index, axis_length)
-    print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data/max().item():.5e}")
+    print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data.max().item():.5e}")
 
     # Calculate global total based on units
     global_total = None
