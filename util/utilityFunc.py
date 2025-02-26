@@ -1228,14 +1228,14 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
                     cbarmax=None,
                     is_diff=True,
                 )
-                time_series_plot(
-                    axis=time_analysis_axis,
-                    data=data_per_year_stack_diff,
-                    marker="*",
-                    line_style="-",
-                    color="g",
-                    label=figure_label_diff,
-                )
+                #time_series_plot(
+                #    axis=time_analysis_axis,
+                #    data=data_per_year_stack_diff,
+                #    marker="*",
+                #    line_style="-",
+                #    color="g",
+                #    label=figure_label_diff,
+                #)
                 map_figure.savefig(
                     f"figures/figure{first_selection}_and_figure{second_selection}_diff_map"
                 )
