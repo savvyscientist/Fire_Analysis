@@ -1,0 +1,36 @@
+{
+  "selected_script": ["time_analysis_version_two"],
+  "time_analysis_version_two": {
+    "time_analysis_figure_data": {
+      "title": "CO2 Emissions",
+      "xlabel": "Yearly",
+      "ylabel": "CO2 Emissions"
+    },
+    "folders": [
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km/monthly/test",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "b",
+          "marker": "x",
+          "line_style": "-",
+          "label": "ModelE CO2 Emissions",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",
+        "file_type": "GFED4s_Yearly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED4s CO2 Emissions",
+          "cbarmax": null 
+        }
+      }
+    ]
+  }
+}
