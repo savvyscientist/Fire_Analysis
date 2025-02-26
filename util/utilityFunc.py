@@ -777,27 +777,44 @@ def define_subplot(
 
         if logMap and masked_data.min() > 0:
             # For log plots, ensure vmin is positive
-            vmin = max(masked_data.compressed().min() * 0.9, 1.e-6)
-            logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
-            p = ax.pcolormesh(
-                lons,
-                lats,
-                masked_data,
-                transform=ccrs.PlateCarree(),
-                cmap="jet",
-                norm=logNorm,
-            )
+            try:
+                # try to get the minimum non-masked value
+                if np.ma.count(masked_data) > 0:
+                    vmin = max(masked_data.min() * 0.9, 1.e-10)
+                else:
+                    vmin = 1.e-10
+
+                logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
+                p = ax.pcolormesh(
+                        lons,
+                        lats,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        norm=logNorm,
+                        )
+            except ValueError as e:
+                print(f"Warning: Log scale error - {e}. Switching to linear scale")
+                # For linear plots, use the full range
+                p = ax.pcolormesh(
+                        lons,
+                        lats,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        vmin=0.0,
+                        vmax=masx,
+                        )
         else:
-            # For linear plots, use the full range
             p = ax.pcolormesh(
-                lons,
-                lats,
-                masked_data,
-                transform=ccrs.PlateCarree(),
-                cmap="jet",
-                vmin=0.0,
-                vmax=masx,
-            )
+                        lons,
+                        lats,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        vmin=0.0,
+                        vmax=masx,
+                        )
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
@@ -820,14 +837,28 @@ def map_plot(
     variables=None,
 ):
     """
-    Plots the decadal mean burned area of both GFED and ModelE side by side.
+    Plots spatial data with optimized color scaling to show data variability.
 
     Parameters:
-    decade_mean_gfed4sba (xarray.DataArray): The decadal mean burned area (lat, lon array).
-    decade_mean_modelEba (xarray.DataArray): The decadal mean burned area from ModelE(lat, lon array).
+    decade_data (xarray.DataArray): The spatial data to plot
     """
     print(axis_index, axis_length)
     print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data.max().item():.5e}")
+
+    # Convert to numpy for percentile calculations
+    data_np = decade_data.values
+    
+    # Get positive data only for better scaling
+    positive_data = data_np[data_np > 0]
+    if len(positive_data) > 0:
+        # Calculate percentiles of the positive data
+        p95 = np.percentile(positive_data, 95)
+        p99 = np.percentile(positive_data, 99)
+        median = np.median(positive_data)
+        print(f"Data percentiles: 50%={median: .5e}, 95%={p95: .5e}, 99%={p99: .5e}") 
+    else:
+        p95 = p99 = 1.0
+        print("No positive data found")
 
     # Calculate global total based on units
     global_total = None
@@ -847,22 +878,20 @@ def map_plot(
         # Default case for other units
         global_total = f"{decade_data.sum():.3e} {units}"
 
-    # Set cbarmax based on variable types if provided
-    if variables is not None:
-        # Set specific cbarmax
-        if any('fireCount' in var for var in variables):
-            cbarmax = decade_data.max().item()
-        elif any ('CtoG' in var for var in variables):
-            cbarmax = 0.01
-        elif any ('BA_' in var for var in variables):
-            if decade_data.max() > 0:
-                cbarmax = decade_data.max().item()
-    # Ensure a reasonable cbarmax value
-    if cbarmax is None or (not is_diff and cbarmax < 0.1 * decade_data.max().item()):
-        if decade_data.max() > 0:
-            cbarmax = decade_data.max().item()
+    # Set a more reasonable colorbar max for better visualization
+    if cbarmax is None or (not is_diff and cbarmax > p95):
+        # Use 95th percentile for better visualization of variability,
+        # but never go lower than 20% of the actual max to ensure outliers are visible
+        min_allowed_cbarmax = 0.2 * decade_data.max().item()
+        if p95 < min_allowed_cbarmax:
+            cbarmax = min_allowed_cbarmax
         else:
-            cbarmax = 1.0 # Default fallback
+            cbarmax = p95
+
+    # Ensure a reasonable cbarmax value
+    if cbarmax <= 0 or (not is_diff and cbarmax < 1e-10):
+        cbarmax = 1.0
+
     print(f"Using cbarmax value: {cbarmax}")
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
