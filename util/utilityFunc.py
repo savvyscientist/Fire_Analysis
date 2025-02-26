@@ -1251,6 +1251,28 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
 
 
 def run_time_series_diff_analysis(folder_data_one, folder_data_two):
+    """
+    Calculate the difference between two datasets for time series analysis.
+
+    Parameters:
+    ----------
+    folder_data_one : dict
+        Dictionary with information about the first dataset
+    folder_data_two : dict
+        Dictionary with information about the second dataset
+        
+    Returns:
+    -------
+    tuple containing:
+        - time_mean_data_diff : xarray.DataArray, spatial difference in temporal mean
+        - data_per_year_stack_diff : ndarray, difference in time series values
+        - longitude : array, longitude values
+        - latitude : array, latitude values
+        - units : str, units of the difference data
+        - start_year : int, starting year
+        - end_year : int, ending year
+        - figure_label : str, label for the figure
+    """
     folder_path_one, figure_data_one, file_type_one, variables_one = (
         folder_data_one["folder_path"],
         folder_data_one["figure_data"],
@@ -1265,7 +1287,7 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         folder_data_two["variables"],
     )
 
-    # Call intann_BA_xarray to calculate decadal mean BA and interannual variability
+    # Obtain data for both datasets
     (
         time_mean_data_one,
         data_per_year_stack_one,
@@ -1293,28 +1315,43 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         NetCDF_Type=file_type_two,
         variables=variables_two,
     )
-    # print(time_mean_data_one.values)
-    # print(time_mean_data_two.values)
-    # print(data_per_year_stack_two - data_per_year_stack_one)
-    time_mean_data_one.values = time_mean_data_one.values - time_mean_data_two.values
-    print((data_per_year_stack_two[0:-2]))
-    data_per_year_stack_diff = data_per_year_stack_one - data_per_year_stack_two[0:-2]
 
+    # Check if units are compatible for subtraction
+    if units_one != units_two:
+        print(f"WARNING: Units do not match! {units_one} vs {units_two}")
+        print("Cannot perform subtraction with different units.")
+        print("Continuing with calculation, but results may not be meaningful.")
+
+    # Calculate the difference in spatial means
+    time_mean_data_diff = time_mean_data_one.copy()
+    time_mean_data_diff.values = time_mean_data_one.values - time_mean_data_two.values
+
+    # Calculate the difference in time series data
+    print(f"Shape of data_per_year_stack_two: {data_per_year_stack_two.shape}")
+    print(f"Shape of data_per_year_stack_one: {data_per_year_stack_one.shape}")
+
+    # Make sure the arrays have compatible shapes for subtraction
+    min_length = min(len(data_per_year_stack_one), len(data_per_year_stack_two))
+    data_per_year_stack_diff = data_per_year_stack_one[:min_length] - data_per_year_stack_two[:min_length]
+
+    # Adjust the years for the difference time series
     min_year = min(
         data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
     )
 
-    for index in range(0, len(data_per_year_stack_diff)):
-        data_per_year_stack_diff[index][0] += min_year + index
+    for index in range(len(data_per_year_stack_diff)):
+        data_per_year_stack_diff[index][0] = min_year + index
+
+    # Create a descriptive figure label
+    figure_label = f"{figure_data_one['label']} - {figure_data_two['label']}"
 
     return (
-        (time_mean_data_one),
-        (data_per_year_stack_diff),
+        time_mean_data_diff,
+        data_per_year_stack_diff,
         longitude_one,
         latitude_one,
-        "Lightning Strikes",
+        units_one, # Use the units from the first dataset
         start_year_one,
         end_year_one,
-        f"{figure_data_one['label']} - {figure_data_two['label']}",
+        figure_label,
     )
-    pass
