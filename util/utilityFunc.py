@@ -729,6 +729,7 @@ def define_subplot(
     logMap=False,
 ):
     """Define the properties of a subplot with optional difference normalization.""" 
+    # labelpad sets the distance of the colorbar from the map
     # Only use default scaling if masx is None 
     if masx is None: 
         masx = decade_data.max().item() 
@@ -737,8 +738,6 @@ def define_subplot(
     # Mask values that are less than or equal to zero
     masked_data = np.ma.masked_where(decade_data <= 0, decade_data)
 
-    # labelpad sets the distance of the colorbar from the map
-    """Define the properties of a subplot with optional difference normalization."""
     ax.coastlines(color="black")
     ax.add_feature(cfeature.LAND, edgecolor="gray")
     ax.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=1)
@@ -1232,9 +1231,9 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
                 time_series_plot(
                     axis=time_analysis_axis,
                     data=data_per_year_stack_diff,
-                    marker="o",
+                    marker="*",
                     line_style="-",
-                    color="r",
+                    color="g",
                     label=figure_label_diff,
                 )
                 map_figure.savefig(
