@@ -12,7 +12,7 @@ def utilityRunner():
             script_env_data = env_json[script]
             run_time_series_analysis(
                 folder_data_list=script_env_data["folders"],
-                time_analysis_figure_data=script_env_data["time_analysis_figure_data"],
+                time_analysis_figure_data=script_env_data["time_analysis_figure_data"]
             )
 
         # elif script == "time_analysis":
