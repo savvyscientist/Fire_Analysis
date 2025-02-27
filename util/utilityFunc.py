@@ -594,10 +594,6 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
 
         if monthly:
             # Extract year from filename
-            # Print the file path for debugging
-            print(f"Processing monthly file: {file_path}")
-            
-            # Extract year from filename
             try:
                 year = int(file_path.split(".")[0][-4:])
                 
