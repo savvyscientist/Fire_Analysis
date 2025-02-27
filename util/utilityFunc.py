@@ -21,6 +21,7 @@ import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from netCDF4 import Dataset
+import re
 
 from utilityGlobal import (
     M2TOMHA,
@@ -289,7 +290,35 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
             height, width = monthly_burned_area.shape
             latitudes = np.linspace(-90, 90, height)
             longitudes = np.linspace(-180, 180, width)
-            year = int(file.split("\\")[-1][2:6])
+
+            # Extract year and month from the filename
+            # Determin which path seperator is used
+            if '\\' in file:
+                filename = file.split('\\')[-1]
+            else:
+                filename = file.split('/')[-1]
+            # Print file name for debugging
+            print(f"Processing file: {filename}")
+
+            # Specific extraction for BA[YYYYMM]_90144.nc pattern
+            year_month_match = re.search(r'BA(\d{6})(?:_|\\.)', filename)
+
+            if year_month_match:
+                year_month = year_month_match.group(1)
+                year = int(year_month[:4])
+                month = int(year_month[4:6])
+                print(f"Extracted year: {year}, month: {month}")
+            else:
+                # Fallback to 4-digit pattern
+                year_match = re.search(r'(\d{4})', filename)
+                if year_match:
+                    year = int(year_match.group(1))
+                    print(f"Ectracted year (fallback): (year)")
+                else:
+                    raise ValueError(f"Could not extract year from filename: {filename}")
+
+            print(f"Year extracted {year}")
+
             total_xarray = xr.DataArray(
                 monthly_burned_area,
                 coords={
@@ -299,7 +328,7 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
                 dims=["latitude", "longitude"],
                 attrs=attribute_dict,
             )
-            print(year)
+
             if year in yearly_data:
                 yearly_data[year] += total_xarray
             else:
