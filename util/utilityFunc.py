@@ -244,12 +244,16 @@ def obtain_netcdf_files(dir_path) -> list:
 
 def read_gfed5(files, upscaled=False, variable_name="Total"):
     """
-    Reads multiple HDF5 files using h5py, calculates the annual burned area,
+    Reads multiple HDF5 files using h5py, preserves monthly burned area data,
     and returns the data as xarray.DataArray.
     """
-    time_array = []
-    yearly_data = {}
+    monthly_data_list = []
+    time_values = []
     attribute_dict = {}
+    
+    # Sort files to ensure chronological order
+    files.sort()
+    
     for file in files:
         with Dataset(file) as netcdf_dataset:
             # obtain the variables in the netcdf_dataset
@@ -271,19 +275,21 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
             var_data_array = (
                 var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
             )
+
             # this depends if the shape includes a time dimension
             monthly_burned_area = (
                 var_data_array[0] if len(var_data_array.shape) > 2 else var_data_array
             )
 
             # Copy attributes of the burned area fraction
-            for attr_name in netcdf_dataset.variables["Total"].ncattrs():
-                attribute_dict[attr_name] = getattr(
-                    netcdf_dataset.variables["Total"], attr_name
-                )
-
-            # update the units to match the upscaling process
-            attribute_dict["units"] = "m^2"
+            if not attribute_dict:
+                for attr_name in netcdf_dataset.variables["Total"].ncattrs():
+                    attribute_dict[attr_name] = getattr(
+                        netcdf_dataset.variables["Total"], attr_name
+                    )
+                
+                # update the units to match the upscaling process
+                attribute_dict["units"] = "m^2"
 
             # obtain the height and width from the upscale shape
             # create an evenly spaced array representing the longitude and the latitude
@@ -292,11 +298,12 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
             longitudes = np.linspace(-180, 180, width)
 
             # Extract year and month from the filename
-            # Determin which path seperator is used
+            # Determine which path separator is used
             if '\\' in file:
                 filename = file.split('\\')[-1]
             else:
                 filename = file.split('/')[-1]
+
             # Print file name for debugging
             print(f"Processing file: {filename}")
 
@@ -308,64 +315,37 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
                 year = int(year_month[:4])
                 month = int(year_month[4:6])
                 print(f"Extracted year: {year}, month: {month}")
+                
+                # Create a decimal year value for this month (e.g., 2009.0 for Jan, 2009.083 for Feb)
+                decimal_year = year + (month - 1) / 12.0
+                time_values.append(decimal_year)
             else:
                 # Fallback to 4-digit pattern
                 year_match = re.search(r'(\d{4})', filename)
                 if year_match:
                     year = int(year_match.group(1))
-                    print(f"Ectracted year (fallback): (year)")
+                    print(f"Extracted year (fallback): {year}")
+                    time_values.append(float(year))
                 else:
                     raise ValueError(f"Could not extract year from filename: {filename}")
 
-            print(f"Year extracted {year}")
+            # Store the monthly burned area directly
+            monthly_data_list.append(monthly_burned_area)
 
-            total_xarray = xr.DataArray(
-                monthly_burned_area,
-                coords={
-                    "latitude": latitudes,
-                    "longitude": longitudes,
-                },
-                dims=["latitude", "longitude"],
-                attrs=attribute_dict,
-            )
+    # Check if we have any data
+    if not monthly_data_list:
+        raise ValueError("No valid data found in the files")
 
-            if year in yearly_data:
-                yearly_data[year] += total_xarray
-            else:
-                yearly_data[year] = total_xarray
-
-            # flip the data matrix (upside down due to the GFED dataset's orientation)
-            # burned_fraction_upscaled = np.flip(burned_fraction_upscaled, 0)
-
-            # create the xarray data array for the upscaled burned area and add it to the dictionary
-
-    # height, width = yearly_data[0].shape
-    #     time_array.append(year)
-
-    yearly_data = dict(sorted(yearly_data.items()))
-    # make sure the array is a LIST when passing to the xr.DataArray
-    total_data_array = (
-        xr.DataArray(
-            list(yearly_data.values()),
-            coords={
-                "time": list(yearly_data.keys()),
-                "latitude": latitudes,
-                "longitude": longitudes,
-            },
-            dims=["time", "latitude", "longitude"],
-            attrs=attribute_dict,
-        )
-        if upscaled
-        else xr.DataArray(
-            list(yearly_data.values()),
-            coords={
-                "time": list(yearly_data.keys()),
-                "latitude": latitudes,
-                "longitude": longitudes,
-            },
-            dims=["time", "latitude", "longitude"],
-            attrs=attribute_dict,
-        )
+    # Create xarray DataArray with time dimension preserved
+    total_data_array = xr.DataArray(
+        monthly_data_list,
+        coords={
+            "time": time_values,
+            "latitude": latitudes,
+            "longitude": longitudes,
+        },
+        dims=["time", "latitude", "longitude"],
+        attrs=attribute_dict,
     )
 
     return total_data_array, longitudes, latitudes
@@ -954,32 +934,97 @@ def time_series_plot(
     grid_visible=True,
 ):
     """
-    Plots the total burned area as a function of year for both GFED and ModelE data.
+    Plots time series data with appropriate formatting for annual or monthly data.
 
     Parameters:
-    gfed4sba_per_year (np.ndarray): A 2D array with columns (year, totalBA), where totalBA is the sum of burned area for that year.
-    modelE_BA_per_year (np.ndarray): A 2D array with columns (year, modelE_BA), where modelE_BA is the sum of burned area for that year.
+    axis (matplotlib.axes): The axis to plot on
+    data (np.ndarray): A 2D array with columns (time, value)
+    marker (str): Marker style for the plot
+    line_style (str): Line style for the plot
+    color (str): Color for the plot
+    label (str): Label for the legend
+    grid_visible (bool): Whether to show grid lines
     """
-
-    # try:
-    # Extract years and total burned area for both GFED and ModelE
-    years_data = data[:, 0]
-    total_data = data[:, 1]
-
-    # Plot the time series of total burned area for both GFED and ModelE
+    # Extract time values and data values
+    time_values = data[:, 0]
+    data_values = data[:, 1]
+    
+    # Plot the data
     axis.plot(
-        years_data,
-        total_data,
+        time_values,
+        data_values,
         marker=marker,
         linestyle=line_style,
         color=color,
         label=label,
     )
+
+    # Check if we have monthly data by looking for fractional parts
+    has_monthly_data = np.any(np.mod(time_values, 1) > 0)
+    
+    if has_monthly_data:
+        # For monthly data, create custom tick positions and labels
+        # Find the unique years
+        years = np.unique(np.floor(time_values).astype(int))
+        
+        # If we have a single year of data
+        if len(years) == 1:
+            # Set custom ticks at each month position
+            tick_positions = []
+            tick_labels = []
+            
+            # Month abbreviations
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            
+            year = years[0]
+            for month in range(12):
+                decimal_time = year + month/12.0
+                # Check if this month exists in our data
+                if any(np.isclose(time_values, decimal_time, atol=0.01)):
+                    tick_positions.append(decimal_time)
+                    tick_labels.append(f"{month_names[month]}")
+            
+            # Set custom ticks
+            axis.set_xticks(tick_positions)
+            axis.set_xticklabels(tick_labels, rotation=45, ha='right')
+            
+            # Set the title to include the year
+            axis.set_title(f"{axis.get_title()} ({year})")
+        else:
+            # For multiple years, show tick at start of each year and some months
+            tick_positions = []
+            tick_labels = []
+            
+            for year in years:
+                tick_positions.append(year)
+                tick_labels.append(f"{year}")
+                
+                # Add mid-year tick if we have fewer than 5 years
+                if len(years) < 5:
+                    tick_positions.append(year + 0.5)
+                    tick_labels.append(f"Jul {year}")
+            
+            axis.set_xticks(tick_positions)
+            axis.set_xticklabels(tick_labels, rotation=45 if len(years) < 5 else 0)
+        
+        # Add more space at the bottom for rotated labels
+        plt.subplots_adjust(bottom=0.15)
+    else:
+        # For annual data, use integer ticks
+        if len(time_values) <= 10:
+            # For a small number of years, show all years
+            axis.set_xticks(time_values)
+            axis.set_xticklabels([str(int(year)) for year in time_values])
+        else:
+            # For many years, let matplotlib handle the ticks
+            axis.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    
+    # Add legend and grid
     axis.legend()
     axis.grid(grid_visible)
-    # except:
-    #     print("title, xlabel...etc already set")
-
+    
+    return axis
 
 def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
     match (NetCDF_Type):
@@ -1047,6 +1092,7 @@ def obtain_time_series_xarray(
     print(f"Time values: {total_value.coords['time'].values}")
 
     time_mean_data = total_value.mean(dim="time")
+    print(f"Shape of time_mean_data: {time_mean_data.shape}")
 
     units = total_value.attrs["units"]
     print(f"Units: {units}")
@@ -1063,7 +1109,6 @@ def obtain_time_series_xarray(
         total_data_array = total_value.sum(dim=sum_dimensions).values
         print("Regular Sum Implemented")
 
-
     # Get time values
     time_values = total_value.coords["time"].values
     years = np.unique(time_values)
@@ -1077,20 +1122,60 @@ def obtain_time_series_xarray(
         print(f"Found monthly data ({len(total_data_array)} months for {len(years)} years)")
         if annual:
             print("Aggregating to annual totals")
-            # Reshape to (nyears, 12) and sum over months
-            monthly_totals = total_data_array.reshape(len(years), 12)
-            total_data_array = monthly_totals.sum(axis=1)
-            time_values = years
+            # Check if the data has 12 months per year
+            if len(total_data_array) == len(years) * 12:
+                # Reshape to (nyears, 12) and sum over months
+                monthly_totals = total_data_array.reshape(len(years), 12)
+                total_data_array = monthly_totals.sum(axis=1)
+                time_values = years
+            else:
+                print(f"Warning: Number of months ({len(total_data_array)}) is not 12 times the number of years ({len(years)})")
+                print("Proceeding with original data without reshaping")
+                if annual:
+                    # Create yearly values by averaging months
+                    yearly_data = {}
+                    for i, t in enumerate(time_values):
+                        year = int(t)
+                        if year in yearly_data:
+                            yearly_data[year].append(total_data_array[i])
+                        else:
+                            yearly_data[year] = [total_data_array[i]]
+                    
+                    # Average the months for each year
+                    time_values = np.array(list(yearly_data.keys()))
+                    total_data_array = np.array([np.mean(vals) for vals in yearly_data.values()])
         else:
             print("Keeping monthly resolution")
             # For monthly data create decimal years (e.g. 2009.0, 2009.083, ...)
-            # Create months array from 0 to 11
-            months = np.arange(12)
-            # Creare decimal years by adding month fractions to each year
-            time_values = np.array([year + month/12 for year in years for month in np.arange(12)])
+            if len(time_values) == len(total_data_array):
+                # If time_values already has proper decimal years, use them
+                print("Using provided time values")
+            else:
+                # Otherwise, create decimal years
+                print("Creating decimal year values for months")
+                # Create months array from 0 to 11
+                months = np.arange(12)
+                # Create decimal years by adding month fractions to each year
+                time_values = np.array([year + month/12 for year in years for month in months])
+                
+                # Make sure the length matches total_data_array
+                if len(time_values) > len(total_data_array):
+                    time_values = time_values[:len(total_data_array)]
+                
+                print(f"Created {len(time_values)} time points")
 
     print(f"Time values shape: {time_values.shape}")
     print(f"Total data array shape: {total_data_array.shape}")
+    print(f"First few time values: {time_values[:5]}")
+
+    # Make sure the lengths match before creating column stack
+    if len(time_values) != len(total_data_array):
+        print(f"Warning: Length mismatch between time_values ({len(time_values)}) and total_data_array ({len(total_data_array)})")
+        # Fix by truncating to the shorter length
+        min_length = min(len(time_values), len(total_data_array))
+        time_values = time_values[:min_length]
+        total_data_array = total_data_array[:min_length]
+        print(f"Truncated both arrays to length {min_length}")
 
     data_per_year_stack = np.column_stack((time_values, total_data_array))
     print(f"Final stacked shape: {data_per_year_stack.shape}")
