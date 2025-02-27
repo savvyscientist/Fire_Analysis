@@ -1191,7 +1191,7 @@ def obtain_time_series_xarray(
     )
 
 
-def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=True):
+def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=False):
     """
     Run time series analysis for multiple datasets
     Parameters
@@ -1203,7 +1203,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     annual : bool, optional
        If True, show annual totals for data
        If False, show monthly resolution data points 
-       Default is True
+       Default is False 
     """
     # Plot side by side maps for GFED and ModelE
     _, time_analysis_axis = plt.subplots(figsize=(10, 6))
@@ -1212,6 +1212,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     global_year_min = 9999
     if not exists("figures"):
         mkdir("figures")
+
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
         map_figure, map_axis = plt.subplots(
@@ -1228,6 +1229,11 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             folder_data["variables"],
         )
 
+        print(f"\nProcessing dataset {index+1}/{len(folder_data_list)}: {file_type}")
+        print(f"Variables: {variables}")
+        print(f"Folder path: {folder_path}")
+        print(f"Annual aggregation: {annual}")
+
         (
             time_mean_data,
             data_per_year_stack,
@@ -1240,11 +1246,11 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             NetCDF_folder_Path=folder_path,
             NetCDF_Type=file_type,
             variables=variables,
-            annual=False
+            annual=annual
         )
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
-        # Plot the preiod mean variable 
+        # Plot the period mean variable 
         map_plot(
             figure=map_figure,
             axis=map_axis,
@@ -1268,17 +1274,18 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             color=figure_data["color"],
             label=figure_label,
         )
-        global_year_max = (
-            int(end_year)
-            if int(global_year_max) < int(end_year)
-            else int(global_year_max)
-        )
-        global_year_min = (
-            int(start_year)
-            if int(global_year_min) > int(start_year)
-            else int(global_year_min)
-        )
+
+        # Update the global year range
+        global_year_max = max(global_year_max, int(np.ceil(data_per_year_stack[:, 0].max())))
+        global_year_min = min(global_year_min, int(np.floor(data_per_year_stack[:, 0].min())))
+
         map_figure.savefig(f"figures/map_figure_{index}")
+
+    # Set the title and labels for the time series plot
+    if annual:
+        xlabel = f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
+    else:
+        xlabel = f"Monthly Data ({global_year_min}-{global_year_max})"
 
     if len(folder_data_list) > 1:
         loop_flag = True
@@ -1355,10 +1362,13 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
                 )
 
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
-    time_analysis_axis.set_xlabel(
-        f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
-    )
+    time_analysis_axis.set_xlabel(xlabel)
     time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
+    
+    # Add more space at the bottom for rotated month labels
+    if not annual:
+        plt.subplots_adjust(bottom=0.18, right=0.85)  # Make room for legend too
+
     _.savefig(f"figures/time_analysis_figure")
     plt.show()
 
@@ -1373,6 +1383,8 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         Dictionary with information about the first dataset
     folder_data_two : dict
         Dictionary with information about the second dataset
+    annual : bool
+        Whether to aggregate data annually or keep monthly resolution
         
     Returns:
     -------
@@ -1401,6 +1413,7 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     )
 
     # Obtain data for both datasets
+    print(f"Getting data for dataset 1: {file_type_one}")
     (
         time_mean_data_one,
         data_per_year_stack_one,
@@ -1413,8 +1426,10 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         NetCDF_folder_Path=folder_path_one,
         NetCDF_Type=file_type_one,
         variables=variables_one,
+        annual=annual
     )
 
+    print(f"Getting data for dataset 2: {file_type_two}")
     (
         time_mean_data_two,
         data_per_year_stack_two,
@@ -1427,6 +1442,7 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         NetCDF_folder_Path=folder_path_two,
         NetCDF_Type=file_type_two,
         variables=variables_two,
+        annual=annual
     )
 
     # Check if units are compatible for subtraction
@@ -1439,21 +1455,78 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     time_mean_data_diff = time_mean_data_one.copy()
     time_mean_data_diff.values = time_mean_data_one.values - time_mean_data_two.values
 
-    # Calculate the difference in time series data
-    print(f"Shape of data_per_year_stack_two: {data_per_year_stack_two.shape}")
-    print(f"Shape of data_per_year_stack_one: {data_per_year_stack_one.shape}")
+    # For monthly data, we need to align time points before subtraction
+    if not annual and (np.any(np.mod(data_per_year_stack_one[:, 0], 1) > 0) or 
+                      np.any(np.mod(data_per_year_stack_two[:, 0], 1) > 0)):
+        print("Processing monthly difference data...")
+        
+        # Create dictionaries to store data by decimal year
+        data_dict_one = {time: value for time, value in data_per_year_stack_one}
+        data_dict_two = {time: value for time, value in data_per_year_stack_two}
+        
+        # Find common time points
+        common_times = sorted(set(data_dict_one.keys()) & set(data_dict_two.keys()))
+        
+        if not common_times:
+            print("WARNING: No common time points found between datasets.")
+            print("Cannot calculate time series difference.")
+            data_per_year_stack_diff = np.array([])
+        else:
+            print(f"Found {len(common_times)} common time points")
+            
+            # Calculate differences for common time points
+            diff_data = []
+            for time in common_times:
+                diff_value = data_dict_one[time] - data_dict_two[time]
+                diff_data.append([time, diff_value])
+            
+            data_per_year_stack_diff = np.array(diff_data)
+    else:
+        # For annual data or if there are no decimal years
+        print("Processing regular difference data...")
+        print(f"Shape of data_per_year_stack_one: {data_per_year_stack_one.shape}")
+        print(f"Shape of data_per_year_stack_two: {data_per_year_stack_two.shape}")
+        
+        # Align years if necessary
+        if data_per_year_stack_one.shape[0] != data_per_year_stack_two.shape[0]:
+            print("Datasets have different number of time points. Aligning by year...")
+            
+            # Get the years from both datasets
+            years_one = data_per_year_stack_one[:, 0]
+            years_two = data_per_year_stack_two[:, 0]
+            
+            # Find common years
+            common_years = sorted(set(years_one) & set(years_two))
+            
+            if not common_years:
+                print("WARNING: No common years found between datasets")
+                data_per_year_stack_diff = np.array([])
+            else:
+                # Create new arrays with only common years
+                data_one_common = np.array([[y, data_per_year_stack_one[np.where(years_one == y)[0][0], 1]] 
+                                           for y in common_years])
+                data_two_common = np.array([[y, data_per_year_stack_two[np.where(years_two == y)[0][0], 1]] 
+                                           for y in common_years])
+                
+                # Calculate difference
+                data_per_year_stack_diff = data_one_common.copy()
+                data_per_year_stack_diff[:, 1] = data_one_common[:, 1] - data_two_common[:, 1]
+        else:
+            # Simple case: same number of time points
+            data_per_year_stack_diff = data_per_year_stack_one.copy()
+            data_per_year_stack_diff[:, 1] = data_per_year_stack_one[:, 1] - data_per_year_stack_two[:, 1]
 
-    # Make sure the arrays have compatible shapes for subtraction
-    min_length = min(len(data_per_year_stack_one), len(data_per_year_stack_two))
-    data_per_year_stack_diff = data_per_year_stack_one[:min_length] - data_per_year_stack_two[:min_length]
-
-    # Adjust the years for the difference time series
-    min_year = min(
-        data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
-    )
-
-    for index in range(len(data_per_year_stack_diff)):
-        data_per_year_stack_diff[index][0] = min_year + index
+    # Determine start and end years
+    if len(data_per_year_stack_diff) > 0:
+        if np.issubdtype(type(data_per_year_stack_diff[0, 0]), np.floating):
+            start_year_diff = int(np.floor(np.min(data_per_year_stack_diff[:, 0])))
+            end_year_diff = int(np.ceil(np.max(data_per_year_stack_diff[:, 0])))
+        else:
+            start_year_diff = int(np.min(data_per_year_stack_diff[:, 0]))
+            end_year_diff = int(np.max(data_per_year_stack_diff[:, 0]))
+    else:
+        start_year_diff = start_year_one
+        end_year_diff = end_year_one
 
     # Create a descriptive figure label
     figure_label = f"{figure_data_one['label']} - {figure_data_two['label']}"
@@ -1464,7 +1537,7 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         longitude_one,
         latitude_one,
         units_one, # Use the units from the first dataset
-        start_year_one,
-        end_year_one,
+        start_year_diff,
+        end_year_diff,
         figure_label,
     )
