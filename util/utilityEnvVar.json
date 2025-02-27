@@ -2,33 +2,33 @@
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
     "time_analysis_figure_data": {
-      "title": "Active Fires",
+      "title": "BA",
       "xlabel": "Yearly",
-      "ylabel": "Active Fires"
+      "ylabel": "BA"
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40intflampyrE/test",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km/monthly/test",
         "file_type": "ModelE_Monthly",
-        "variables": ["fireCount"],
+        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
         "figure_data": {
           "color": "b",
           "marker": "x",
           "line_style": "-",
-          "label": "patch",
+          "label": "ModelE fuel consump",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40intpyrE/test",
-        "file_type": "ModelE_Monthly",
-        "variables": ["fireCount"],
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale/test",
+        "file_type": "BA_GFED5",
+        "variables": [],
         "figure_data": {
           "color": "r",
           "marker": "o",
           "line_style": "-",
-          "label": "orig",
-          "cbarmax": null 
+          "label": "GFED5",
+          "cbarmax": null
         }
       }
     ]
