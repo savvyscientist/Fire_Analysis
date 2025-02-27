@@ -11,8 +11,18 @@ def utilityRunner():
         if script == "time_analysis_version_two":
             script_env_data = env_json[script]
             
-            # Check if annual is specified in the config, otherwise default to False (monthly data)
-            annual = script_env_data.get("annual", False)
+            # Check if annual is specified 
+
+            annual = script_env_data.get("annual", None)
+            
+            # If not found at root, look in time_analysis_figure_data
+            if annual is None and "time_analysis_figure_data" in script_env_data:
+                annual = script_env_data["time_analysis_figure_data"].get("annual", False)
+            else:
+                # Default to False (monthly data) if not found anywhere
+                annual = False
+                
+            print(f"Annual aggregation setting: {annual}")
             
             run_time_series_analysis(
                 folder_data_list=script_env_data["folders"],

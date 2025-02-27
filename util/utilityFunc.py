@@ -554,19 +554,25 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
     - longitude: array of longitude values
     - latitude: array of latitude values
     """
-
-    # Initialized a list to store each year's dataset
+    # Sort files to ensure chronological order
+    files.sort()
+    print(f"Processing {len(files)} ModelE files")
+    
+    # Initialized lists to store each year's dataset
     all_data = []
-    all_years = []
+    time_values = []
 
     # Loop over each file and process it
     for file_path in files:
+        print(f"Processing file: {file_path}")
         ds = xr.open_dataset(file_path)
         attribute_dict = {}
+
         # Read dimension sizes dynamically from the dataset
         lat_size = len(ds['lat'])
         lon_size = len(ds['lon'])
         modelE_var_data = np.zeros(shape=(lat_size, lon_size))
+
         # Sum up all requested variables
         for variable in variables:
             # where function replaces values that do not meet the parameters condition
@@ -582,25 +588,60 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
                units = attribute_dict.get('units', '')
                scaling_factor, units = extract_scaling_factor(units)
                attribute_dict['units'] = units
+
         # Apply scaling factor
         modelE_var_data *= scaling_factor
 
-        year = int(file_path.split(".")[0][-4:]) if monthly else int(file_path.split("ANN")[1][:4])
+        if monthly:
+            # Extract year from filename
+            # Print the file path for debugging
+            print(f"Processing monthly file: {file_path}")
+            
+            # Extract year from filename
+            try:
+                year = int(file_path.split(".")[0][-4:])
+                
+                # Extract month from filename (e.g. JAN, FEB, etc.)
+                month = file_path.split(".")[0][-7:-4]
+                # Convert month name to number (0-11)
+                month_num = MONTHLIST.index(month)
+                
+                # Create decimal year value (e.g., 2009.0 for Jan, 2009.083 for Feb)
+                decimal_year = year + month_num/12.0
+                
+                print(f"Extracted year: {year}, month: {month} ({month_num+1}), decimal: {decimal_year:.3f}")
+            except:
+                # Fallback to just using the order in the file list if filename parsing fails
+                print(f"WARNING: Failed to extract month/year from filename. Using file order instead.")
+                year = 2009  # Default year
+                month_num = len(time_values) % 12
+                decimal_year = year + month_num/12.0
+            
+            time_values.append(decimal_year)
+        else:
+            # For annual data, just use the year
+            year = int(file_path.split("ANN")[1][:4])
+            time_values.append(year)
 
-        # Append data and time information
+        # Append data
         all_data.append(modelE_var_data)
-        all_years.append(year)
 
     # Convert lists to arrays
     all_data = np.array(all_data)
-    all_years = np.array(all_years)
+    time_values = np.array(time_values)
+    
+    # Sort by time value if needed
+    if len(time_values) > 1:
+        sort_idx = np.argsort(time_values)
+        all_data = all_data[sort_idx]
+        time_values = time_values[sort_idx]
 
     # Create xarray DataArray
     modelE_all_year = xr.DataArray(
             all_data,
             dims=['time', 'lat', 'lon'],
             coords={
-                'time': all_years,
+                'time': time_values,
                 'lat': ds['lat'].values,
                 'lon': ds['lon'].values
                 },
@@ -613,12 +654,12 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         attribute_dict.get('units',''), 
         monthly=monthly,
         file_path=files[0] if monthly else None,  # Pass file_path for monthly data
-        year=all_years[0] if monthly else None    # Pass year for monthly data
+        year=int(time_values[0]) if monthly else None    # Pass year for monthly data
     )
 
     modelE_all_year.attrs["units"] = new_units
+    print(f"ModelE data time values: {time_values}")
     return modelE_all_year, ds["lon"], ds["lat"]
-
 
 def read_lightning_data(files, yearly=True, upscaled=False):
     """
@@ -746,7 +787,12 @@ def define_subplot(
 
     # Mask values that are less than or equal to zero
     masked_data = np.ma.masked_where(decade_data <= 0, decade_data)
+    
+    # Print mask information for debugging
+    mask_percentage = np.ma.count_masked(masked_data) / masked_data.size * 100
+    print(f"Masked values: {np.ma.count_masked(masked_data)} of {masked_data.size} ({mask_percentage:.2f}%)")
 
+    # Set up the map
     ax.coastlines(color="black")
     ax.add_feature(cfeature.LAND, edgecolor="gray")
     ax.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=1)
@@ -764,7 +810,7 @@ def define_subplot(
         if data_min == data_max:
             norm = mcolors.Normalize(vmin=data_min - 1, vmax=data_max + 1)
         else:
-            abs_max = max(abs(0.25 * data_min), abs(0.25 * data_max))
+            abs_max = max(abs(data_min), abs(data_max))
             norm = mcolors.Normalize(vmin=-abs_max, vmax=abs_max)
         p = ax.pcolormesh(
             lons,
@@ -773,56 +819,59 @@ def define_subplot(
             transform=ccrs.PlateCarree(),
             cmap="bwr",
             norm=norm,
-            vmin=0 if not is_diff else None,
-            vmax=masx if not is_diff else None,
         )
     else:
         # For non-difference plots, either use log scale or linear scale
         # Get the standard jet colormap
         cmap = plt.cm.jet.copy()
-        # Set masked values )zerps amd megatives) to white)
+        # Set masked values (zeros and negatives) to white
         cmap.set_bad('white')
 
-        if logMap and masked_data.min() > 0:
+        # Check if data has any positive values for log scale
+        log_compatible = np.ma.count(masked_data) > 0
+        
+        if logMap and log_compatible:
             # For log plots, ensure vmin is positive
             try:
-                # try to get the minimum non-masked value
+                # Try to get the minimum non-masked value
                 if np.ma.count(masked_data) > 0:
-                    vmin = max(masked_data.min() * 0.9, 1.e-10)
+                    vmin = max(np.ma.min(masked_data) * 0.9, 1e-10)
                 else:
-                    vmin = 1.e-10
+                    vmin = 1e-10
 
+                print(f"Log scale vmin: {vmin}, vmax: {masx}")
                 logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
                 p = ax.pcolormesh(
-                        lons,
-                        lats,
-                        masked_data,
-                        transform=ccrs.PlateCarree(),
-                        cmap=cmap,
-                        norm=logNorm,
-                        )
+                    lons,
+                    lats,
+                    masked_data,
+                    transform=ccrs.PlateCarree(),
+                    cmap=cmap,
+                    norm=logNorm,
+                )
             except ValueError as e:
                 print(f"Warning: Log scale error - {e}. Switching to linear scale")
                 # For linear plots, use the full range
                 p = ax.pcolormesh(
-                        lons,
-                        lats,
-                        masked_data,
-                        transform=ccrs.PlateCarree(),
-                        cmap=cmap,
-                        vmin=0.0,
-                        vmax=masx,
-                        )
+                    lons,
+                    lats,
+                    masked_data,
+                    transform=ccrs.PlateCarree(),
+                    cmap=cmap,
+                    vmin=0.0,
+                    vmax=masx,
+                )
         else:
+            # Linear scale
             p = ax.pcolormesh(
-                        lons,
-                        lats,
-                        masked_data,
-                        transform=ccrs.PlateCarree(),
-                        cmap=cmap,
-                        vmin=0.0,
-                        vmax=masx,
-                        )
+                lons,
+                lats,
+                masked_data,
+                transform=ccrs.PlateCarree(),
+                cmap=cmap,
+                vmin=0.0,
+                vmax=masx,
+            )
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
@@ -851,56 +900,75 @@ def map_plot(
     decade_data (xarray.DataArray): The spatial data to plot
     """
     print(axis_index, axis_length)
-    print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data.max().item():.5e}")
-
-    # Convert to numpy for percentile calculations
-    data_np = decade_data.values
     
-    # Get positive data only for better scaling
-    positive_data = data_np[data_np > 0]
-    if len(positive_data) > 0:
-        # Calculate percentiles of the positive data
-        p95 = np.percentile(positive_data, 95)
-        p99 = np.percentile(positive_data, 99)
-        median = np.median(positive_data)
-        print(f"Data percentiles: 50%={median: .5e}, 95%={p95: .5e}, 99%={p99: .5e}") 
-    else:
-        p95 = p99 = 1.0
-        print("No positive data found")
+    # Try to convert to numpy safely
+    try:
+        data_np = decade_data.values
+        print(f"Data array shape: {data_np.shape}")
+        print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data.max().item():.5e}")
+        
+        # Get positive data only for better scaling
+        positive_data = data_np[data_np > 0]
+        print(f"Number of positive values: {len(positive_data)} out of {data_np.size} ({len(positive_data)/data_np.size*100:.2f}%)")
+
+        if len(positive_data) > 0:
+            # Calculate percentiles of the positive data
+            p95 = np.percentile(positive_data, 95)
+            p99 = np.percentile(positive_data, 99)
+            median = np.median(positive_data)
+            print(f"Data percentiles: 50%={median:.5e}, 95%={p95:.5e}, 99%={p99:.5e}")
+
+            # Sample some positive values
+            sample_size = min(5, len(positive_data))
+            print(f"Sample positive values: {positive_data[:sample_size]}")
+        else:
+            p95 = p99 = 1.0
+            print("No positive data found")
+    except Exception as e:
+        print(f"Error analyzing data: {e}")
+        p95 = decade_data.max().item() if hasattr(decade_data, 'max') else 1.0
+        positive_data = []
 
     # Calculate global total based on units
     global_total = None
-    if "m-2" in units.lower() or "m^-2" in units.lower() or "/m2" in units.lower():
-        # Area-weighted for per-area units
-        grid_cell_area = calculate_grid_area(
-                grid_area_shape=decade_data.shape,
-                units="m^2"
-                )
-        weighted_total = (decade_data * grid_cell_area).sum()
-        # Extract base unit by removing area component
-        base_unit = units.replace("m-2", "").replace("m^-2","").replace("/m2","").strip()
-        if not base_unit:
-            base_unit = "units"
-        global_total = f"{weighted_total:.3e} {base_unit}"
-    else:
-        # Default case for other units
-        global_total = f"{decade_data.sum():.3e} {units}"
-
-    # Set a more reasonable colorbar max for better visualization
-    if cbarmax is None or (not is_diff and cbarmax > p95):
-        # Use 95th percentile for better visualization of variability,
-        # but never go lower than 20% of the actual max to ensure outliers are visible
-        min_allowed_cbarmax = 0.2 * decade_data.max().item()
-        if p95 < min_allowed_cbarmax:
-            cbarmax = min_allowed_cbarmax
+    try:
+        if "m-2" in units.lower() or "m^-2" in units.lower() or "/m2" in units.lower():
+            # Area-weighted for per-area units
+            grid_cell_area = calculate_grid_area(
+                    grid_area_shape=decade_data.shape,
+                    units="m^2"
+                    )
+            weighted_total = (decade_data * grid_cell_area).sum()
+            # Extract base unit by removing area component
+            base_unit = units.replace("m-2", "").replace("m^-2","").replace("/m2","").strip()
+            if not base_unit:
+                base_unit = "units"
+            global_total = f"{weighted_total.item():.3e} {base_unit}"
         else:
-            cbarmax = p95
+            # Default case for other units
+            global_total = f"{decade_data.sum().item():.3e} {units}"
+        
+        print(f"Global total: {global_total}")
+    except Exception as e:
+        print(f"Error calculating global total: {e}")
+        global_total = "N/A"
+	
+    # Set a more reasonable colorbar max for better visualization
+    if cbarmax is None:
+        if len(positive_data) > 0:
+            # Use 99th percentile for better visualization
+            cbarmax = p99
+            print(f"Auto-setting cbarmax to 99th percentile: {cbarmax}")
+        else:
+            cbarmax = 1.0
+            print("No positive data, setting default cbarmax=1.0")
+    else:
+        print(f"Using provided cbarmax: {cbarmax}")
 
     # Ensure a reasonable cbarmax value
-    if cbarmax <= 0 or (not is_diff and cbarmax < 1e-10):
-        cbarmax = 1.0
-
-    print(f"Using cbarmax value: {cbarmax}")
+    if cbarmax <= 0:
+        cbarmax = p99 if len(positive_data) > 0 else 1.0
+        print(f"Corrected non-positive cbarmax to: {cbarmax}")
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
 
