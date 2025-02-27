@@ -10,9 +10,14 @@ def utilityRunner():
     for script in env_json["selected_script"]:
         if script == "time_analysis_version_two":
             script_env_data = env_json[script]
+            
+            # Check if annual is specified in the config, otherwise default to False (monthly data)
+            annual = script_env_data.get("annual", False)
+            
             run_time_series_analysis(
                 folder_data_list=script_env_data["folders"],
-                time_analysis_figure_data=script_env_data["time_analysis_figure_data"]
+                time_analysis_figure_data=script_env_data["time_analysis_figure_data"],
+                annual=annual  # Explicitly pass the annual parameter
             )
 
         # elif script == "time_analysis":

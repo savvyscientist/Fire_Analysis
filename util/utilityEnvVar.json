@@ -2,6 +2,7 @@
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
     "time_analysis_figure_data": {
+      "annual": false,
       "title": "BA",
       "xlabel": "Yearly",
       "ylabel": "BA"
