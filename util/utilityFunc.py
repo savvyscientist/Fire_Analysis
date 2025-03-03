@@ -44,6 +44,7 @@ from utilityGlobal import (
     EARTH_RADIUS_KM,
     EARTH_RADIUS_METERS,
     MONTHLISTDICT,
+    FIGURE_PATH,
 )
 
 
@@ -258,19 +259,20 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
         with Dataset(file) as netcdf_dataset:
             # obtain the variables in the netcdf_dataset
             # dimensions (1, 720, 1440)
-            var_total_data_array = netcdf_dataset.variables[variable_name][:]
-            var_crop_data_array = netcdf_dataset.variables["Crop"][:]
-            var_defo_data_array = netcdf_dataset.variables["Defo"][:]
-            var_peat_data_array = netcdf_dataset.variables["Peat"][:]
+            #var_total_data_array = netcdf_dataset.variables[variable_name][:]
+            #var_crop_data_array = netcdf_dataset.variables["Crop"][:]
+            #var_defo_data_array = netcdf_dataset.variables["Defo"][:]
+            #var_peat_data_array = netcdf_dataset.variables["Peat"][:]
+            var_data_array = netcdf_dataset.variables["Nat"][:]
 
             # obtain the numpy array for each netcdf variable
             # transform the arrays dimensions to (720, 1440) and convert the metric to km^2 -> m^2
-            var_data_array = (
-                var_total_data_array
-                - var_peat_data_array
-                - var_crop_data_array
-                - var_defo_data_array
-            )
+            #var_data_array = (
+            #    var_total_data_array
+            #    - var_peat_data_array
+            #    - var_crop_data_array
+            #    - var_defo_data_array
+            #)
 
             var_data_array = (
                 var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
@@ -1350,7 +1352,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
         global_year_max = max(global_year_max, year_max)
         global_year_min = min(global_year_min, year_min)
 
-        map_figure.savefig(f"figures/map_figure_{index}")
+        map_figure.savefig(f"{time_analysis_figure_data["figs_folder"]}/map_figure_{index}")
 
     # Create difference maps if more than one dataset is provided
     if len(folder_data_list) > 1:
@@ -1429,7 +1431,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
                 #    label=figure_label_diff,
                 #)
                 map_figure.savefig(
-                    f"figures/figure{first_selection}_and_figure{second_selection}_diff_map"
+                   f"{time_analysis_figure_data["figs_folder"]}/figure{first_selection}_and_figure{second_selection}_diff_map"
                 )
 
     # Set the title and labels for the time series plot
@@ -1437,7 +1439,6 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
         xlabel = f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
     else:
         xlabel = f"Monthly Data ({global_year_min}-{global_year_max})"
-        
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
     time_analysis_axis.set_xlabel(xlabel)
     time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
@@ -1446,7 +1447,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     if not annual:
         plt.subplots_adjust(bottom=0.18, right=0.85)  # Make room for legend too
 
-    _.savefig(f"figures/time_analysis_figure")
+    _.savefig(f"{time_analysis_figure_data["figs_folder"]}/time_analysis_figure")
     plt.show()
 
 

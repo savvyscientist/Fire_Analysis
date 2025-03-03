@@ -5,31 +5,32 @@
       "annual": false,
       "title": "BA",
       "xlabel": "Yearly",
-      "ylabel": "BA"
+      "ylabel": "BA",
+      "figs_folder": "peat_BA"
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km/monthly/test",
-        "file_type": "ModelE_Monthly",
-        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale/test",
+        "file_type": "BA_GFED5_upscale",
+        "variables": [],
         "figure_data": {
           "color": "b",
           "marker": "x",
           "line_style": "-",
-          "label": "ModelE fuel consump",
+          "label": "GFED5",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale/test",
-        "file_type": "BA_GFED5",
-        "variables": [],
+        "folder_path": "/discover/nobackup/kmezuman/E6TomaF40pyrEpeat/test_aij",
+        "file_type": "ModelE_Monthly",
+        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
         "figure_data": {
           "color": "r",
           "marker": "o",
           "line_style": "-",
-          "label": "GFED5",
-          "cbarmax": null
+          "label": "pyrE peat CO2 Emissions (nBB=1)",
+          "cbarmax": null 
         }
       }
     ]
