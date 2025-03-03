@@ -43,8 +43,7 @@ from utilityGlobal import (
     DAYS_TO_SECONDS,
     EARTH_RADIUS_KM,
     EARTH_RADIUS_METERS,
-    MONTHLISTDICT,
-    FIGURE_PATH,
+    MONTHLISTDICT
 )
 
 
@@ -1352,7 +1351,8 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
         global_year_max = max(global_year_max, year_max)
         global_year_min = min(global_year_min, year_min)
 
-        map_figure.savefig(f"{time_analysis_figure_data["figs_folder"]}/map_figure_{index}")
+        print(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
+        map_figure.savefig(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
 
     # Create difference maps if more than one dataset is provided
     if len(folder_data_list) > 1:
@@ -1431,7 +1431,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
                 #    label=figure_label_diff,
                 #)
                 map_figure.savefig(
-                   f"{time_analysis_figure_data["figs_folder"]}/figure{first_selection}_and_figure{second_selection}_diff_map"
+                   f"{time_analysis_figure_data['figs_folder']}/figure{first_selection}_and_figure{second_selection}_diff_map"
                 )
 
     # Set the title and labels for the time series plot
@@ -1447,7 +1447,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     if not annual:
         plt.subplots_adjust(bottom=0.18, right=0.85)  # Make room for legend too
 
-    _.savefig(f"{time_analysis_figure_data["figs_folder"]}/time_analysis_figure")
+    _.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure")
     plt.show()
 
 
