@@ -127,4 +127,3 @@ SECONDS_IN_A_YEAR = 60.0 * 60.0 * 24.0 * 365.0
 KILOGRAMS_TO_GRAMS = 10.0**3
 COLOR_MAP = plt.get_cmap("tab20")
 SQM_TO_SQHA = 1e-4
-FIGURE_PATH = '/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/'

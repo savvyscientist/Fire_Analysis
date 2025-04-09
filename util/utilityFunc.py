@@ -1275,8 +1275,11 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
 
     global_year_max = 0
     global_year_min = 9999
-    if not exists("figures"):
-        mkdir("figures")
+
+    # Make sure the output directory exists before saving files
+    output_dir = time_analysis_figure_data['figs_folder']
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Ensuring output directory exists: {output_dir}")
 
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):

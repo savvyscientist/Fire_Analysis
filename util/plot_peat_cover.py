@@ -45,7 +45,7 @@ try:
     units = getattr(peat_data, 'units', 'fraction')
     
     # Fix for logarithmic scale: ensure all values are positive
-    use_log_scale = True  # Set to match your logMap parameter
+    use_log_scale = False  # Set to match your logMap parameter
     
     if use_log_scale:
         # Check if data contains zeros or negative values
@@ -99,7 +99,6 @@ try:
             subplot_title=f"Peat Cover from {filename}",
             units=units,
             cbarmax=vmax,     # Set the maximum explicitly
-            cbarmin=vmin,     # Set the minimum explicitly
             logMap=use_log_scale,
         )
     except ValueError as e:
