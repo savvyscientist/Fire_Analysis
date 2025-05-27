@@ -1,0 +1,62 @@
+{
+  "selected_script": ["time_analysis_version_two"],
+  "time_analysis_version_two": {
+    "time_analysis_figure_data": {
+      "annual": false,
+      "title": "CO2 Emissions",
+      "xlabel": "Yearly",
+      "ylabel": "CO2 Emissions",
+      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_CO2"
+    },
+    "folders": [
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "g",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Foliage",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "m",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Stem",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_cwd/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "k",
+          "marker": "o",
+          "line_style": "-",
+          "label": "CWD",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",
+        "file_type": "GFED4s_Yearly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "r",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED4s CO2 Emissions",
+          "cbarmax": null 
+        }
+      }
+    ]
+  }
+}

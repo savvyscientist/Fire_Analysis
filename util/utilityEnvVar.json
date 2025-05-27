@@ -10,62 +10,110 @@
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_update/aij",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_betad/2010",
         "file_type": "ModelE_Monthly",
         "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "r",
+          "color": "blue",
           "marker": "o",
           "line_style": "-",
-          "label": "All fuels",
+          "label": "All fuels betad",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/aij",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_betadstem/2010",
         "file_type": "ModelE_Monthly",
         "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "g",
+          "color": "lime",
           "marker": "o",
           "line_style": "-",
-          "label": "Foliage",
+          "label": "Stem betad",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem/aij",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_betadcwd/2010",
         "file_type": "ModelE_Monthly",
         "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "m",
+          "color": "purple",
           "marker": "o",
           "line_style": "-",
-          "label": "Stem",
+          "label": "CWD betad",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/aij",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_betadfoliage/2010",
         "file_type": "ModelE_Monthly",
         "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "c",
+          "color": "maroon",
           "marker": "o",
           "line_style": "-",
-          "label": "Litter",
+          "label": "Foliage betad",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_cwd/aij",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_betadlitter/2010",
         "file_type": "ModelE_Monthly",
         "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "k",
+          "color": "olive",
           "marker": "o",
           "line_style": "-",
-          "label": "CWD",
+          "label": "Foliage betad",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_update/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "indigo",
+          "marker": "o",
+          "line_style": "-",
+          "label": "All fuels GFED",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "green",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Foliage GFED",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "magenta",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Stem GFED",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/2010",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "cyan",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Litter GFED",
           "cbarmax": null 
         }
       },
@@ -74,7 +122,7 @@
         "file_type": "GFED4s_Yearly",
         "variables": ["CO2n"],
         "figure_data": {
-          "color": "r",
+          "color": "red",
           "marker": "o",
           "line_style": "-",
           "label": "GFED4s CO2 Emissions",
