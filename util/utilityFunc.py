@@ -352,12 +352,15 @@ def read_gfed5(files, upscaled=False, variable_name="Total"):
     return total_data_array, longitudes, latitudes
 
 
-def read_gfed4s_emis(files, upscaled=False):
+def read_gfed4s_emis(files, variables, upscaled=False, monthly=False):
     """
     Read GFED4s emissions data from multiple netCDF files using xarray. 
+    **the below function is currently written for multiple files but 
+    actually uses only one as it does one year monthly calcualtions**
     Parameters
     ---------- 
     files : list List of paths to GFED4s emissions netCDF files 
+    monthly (bool): If True, process as monthly data; otherwise, as annual
     Returns 
     ------- 
     tuple
@@ -368,7 +371,8 @@ def read_gfed4s_emis(files, upscaled=False):
 
     #Initialize lists to store data from each file
     all_data = []
-    all_years = []
+    time_values = []
+    all_months = []
 
     #Read first file to get dimensions
     ds = xr.open_dataset(files[0], decode_times=False)
@@ -376,9 +380,7 @@ def read_gfed4s_emis(files, upscaled=False):
     lat = ds.lat.values
 
     #Find the emissions variable (first non-coordinated variable)
-    data_vars = list(ds.data_vars)
-    emis_var = data_vars[0]
-    print(ds[emis_var].shape)
+    emis_var = variables[0]
 
     # Get units and other attributed from the first file
     attrs = ds[emis_var].attrs
@@ -405,6 +407,7 @@ def read_gfed4s_emis(files, upscaled=False):
         ds = xr.open_dataset(filename, decode_times=False)
         data = ds[emis_var].values
 
+        test =0. 
         # Process each month
         for month in range(12):
             month_data = data[month, :, :]
@@ -413,33 +416,38 @@ def read_gfed4s_emis(files, upscaled=False):
             #1. If per area units, multiply by grid cell area
             if grid_cell_area is not None:
                 month_data = month_data * grid_cell_area # Convert from flux per area to total flux
+            #print('grid_cell_area.sum',grid_cell_area.sum())
 
             #2. Convert from per second to per month by multiplying with second in month
             days_in_month = days_to_months(str(month+1).zfill(2), year)
             seconds_in_month = days_in_month * DAYS_TO_SECONDS
-            month_data = month_data * seconds_in_month
-
+            month_data = month_data * seconds_in_month 
+            test = test + month_data
             # Append the entire data array
             all_data.append(month_data)
-            # Add year for each month
-            all_years.append(year)
+            # Add month
+            all_months.append(str(month+1).zfill(2))
+
+            decimal_year = year + month/12.0
+            time_values.append(decimal_year)
 
         ds.close()
 
     # Convert lists to arrays and reshape to proper dimensions
     all_data = np.array(all_data) # (time,lat,lon)
-    all_years = np.array(all_years)
+    all_months = np.array(all_months)
+    time_values = np.array(time_values)
 
     # Update units in attributes
     if grid_cell_area is not None:
-        attrs['units'] = 'kg/yr' 
+        attrs['units'] = 'kg/month' 
 
     # Create xarray DataArray
     total_value = xr.DataArray(
             all_data,
             dims=['time', 'lat', 'lon'],
             coords={
-                'time': all_years,
+                'time': time_values,
                 'lat': lat,
                 'lon': lon
             },
@@ -497,7 +505,6 @@ def read_gfed4s(files, upscaled=False):
             if not upscaled
             else file_path.split("_")[1]
         )
-        print(year)
         time_array.append(year)
 
     attribute_dict["units"] = "Global Burned Area m^2"
@@ -540,7 +547,7 @@ def days_to_months(month, year):
         return MONTHLISTDICT[str(month)]
 
 
-def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False):
+def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False,scale=scale):
     """
     Reads ModelE data for given variables
 
@@ -574,17 +581,25 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         lon_size = len(ds['lon'])
         modelE_var_data = np.zeros(shape=(lat_size, lon_size))
 
+        # Account for scaling of gridcells (as defined in denom of the DEFACC)
+        if scale == 'fearth':
+            modelE_var_scale = np.zeros(shape=(lat_size, lon_size))
+            scale_data = ds['axyp'].where(ds['axyp'] > 0.0, 0.0)
+            scale_data = scale_data * ds['soilfr'].where(ds['soilfr'] > 0.0, 0.0)
+
         # Sum up all requested variables
         for variable in variables:
             # where function replaces values that do not meet the parameters condition
             # (replaces all values that are not greater than 0)
             var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
+            if scale == 'fearth':
+                var_data *= scale_data
             modelE_var_data = modelE_var_data + var_data
 
             # Get attributes from the first variable
             if not attribute_dict:
-               for attr_name in ds[variable].attrs:
-                   attribute_dict[attr_name] = getattr(ds[variable], attr_name)
+                for attr_name in ds[variable].attrs:
+                    attribute_dict[attr_name] = getattr(ds[variable], attr_name)
                # Extract scaling factor from units
                units = attribute_dict.get('units', '')
                scaling_factor, units = extract_scaling_factor(units)
@@ -688,7 +703,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             date_range = pd.date_range(
                 start_date, freq="MS", periods=len(density_variable_data)
             )
-            print(len(density_variable_data))
             for month in range(len(density_variable_data)):
                 current_year = int(str(date_range[month]).split("-")[0])
                 curr_month = str(date_range[month]).split("-")[1]
@@ -896,7 +910,6 @@ def map_plot(
     Parameters:
     decade_data (xarray.DataArray): The spatial data to plot
     """
-    print(axis_index, axis_length)
     
     # Try to convert to numpy safely
     try:
@@ -1091,7 +1104,7 @@ def time_series_plot(
     
     return axis
 
-def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
+def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale):
     match (NetCDF_Type):
         case "BA_GFED4":
             total_value, longitude, latitude = read_gfed4s(
@@ -1115,7 +1128,7 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             )
         case "ModelE_Monthly":
             total_value, longitude, latitude = read_ModelE(
-                files=file_paths, variables=variables, monthly=True
+                files=file_paths, variables=variables, monthly=True, scale=scale
             )
         case "lightning":
             total_value, longitude, latitude = read_lightning_data(
@@ -1125,9 +1138,9 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type):
             total_value, longitude, latitude = read_lightning_data(
                 files=file_paths, upscaled=True
             )
-        case "GFED4s_Yearly":
+        case "GFED4s_Monthly":
             total_value, longitude, latitude = read_gfed4s_emis(
-                files=file_paths, upscaled=True
+                files=file_paths, variables=variables, upscaled=True, monthly=True
             )
         case _:
             print("[-] No Parsing Script Found For", NetCDF_Type)
@@ -1147,7 +1160,7 @@ def obtain_time_series_xarray(
     file_paths = obtain_netcdf_files(NetCDF_folder_Path)
     print(f"\nProcessing {NetCDF_Type}...")
     total_value, longitude, latitude = handle_time_extraction_type(
-        file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type
+        file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type,scale=scale
     )
 
     time_dimension = total_value.dims[0]
@@ -1441,7 +1454,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     if annual:
         xlabel = f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
     else:
-        xlabel = f"Monthly Data ({global_year_min}-{global_year_max})"
+        xlabel = f"Monthly Data ({global_year_min})"
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
     time_analysis_axis.set_xlabel(xlabel)
     time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
