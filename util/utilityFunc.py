@@ -251,7 +251,7 @@ def obtain_netcdf_files(dir_path) -> list:
     ]
 
 
-def read_gfed5(files, upscaled=False, variable_name="Nat"):
+def read_gfed5(files, variables=None, upscaled=False):
     """
     Reads multiple netCDF files using netCDF4.Dataset, preserves monthly burned area data,
     and returns the data as xarray.DataArray.
@@ -260,18 +260,24 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
     -----------
     files : list
         List of paths to GFED5 netCDF files
+    variables : list or None
+        List of variable names to read and sum. If None, defaults to ["Total"]
     upscaled : bool, optional
         If True, data is already in m^2; if False, convert from km^2 to m^2 (default: False)
-    variable_name : str, optional
-        Name of the variable to read (default: "Total")
         
     Returns:
     --------
     tuple : (total_data_array, longitudes, latitudes)
-        - total_data_array: xarray DataArray with dimensions [time, latitude, longitude]
-        - longitudes: longitude coordinate array
-        - latitudes: latitude coordinate array
     """
+    # Set default variables if none provided
+    if variables is None:
+        variables = ["Total"]
+    elif isinstance(variables, str):
+        variables = [variables]  # Convert single string to list
+    
+    if not variables:
+        raise ValueError("Variables list cannot be empty")
+    
     monthly_data_list = []
     time_values = []
     attribute_dict = {}
@@ -285,7 +291,7 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
     # Initialize coordinate variables
     latitudes = None
     longitudes = None
-
+    
     for file_idx, file in enumerate(files):
         if not os.path.exists(file):
             print(f"Warning: File not found: {file}")
@@ -293,46 +299,51 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
             
         try:
             with Dataset(file) as netcdf_dataset:
-                # Check if the requested variable exists
-                if variable_name not in netcdf_dataset.variables:
-                    print(f"Warning: Variable '{variable_name}' not found in {file}")
-                    print(f"Available variables: {list(netcdf_dataset.variables.keys())}")
-                    continue
+                # Initialize data array for this file
+                monthly_burned_area = None
                 
-                # Read the specified variable from the netCDF dataset
-                # dimensions expected: (time, latitude, longitude) or (latitude, longitude)
-                var_data_array = netcdf_dataset.variables[variable_name][:]
-                
-                # Convert units from km^2 to m^2 if not already upscaled
-                var_data_array = (
-                    var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
-                )
+                # Process each variable and sum them
+                for var_idx, variable_name in enumerate(variables):
+                    if variable_name not in netcdf_dataset.variables:
+                        print(f"Warning: Variable '{variable_name}' not found in {file}")
+                        print(f"Available variables: {list(netcdf_dataset.variables.keys())}")
+                        continue
+                    
+                    # Read the variable from the netCDF dataset
+                    var_data_array = netcdf_dataset.variables[variable_name][:]
+                    
+                    # Convert units from km^2 to m^2 if not already upscaled
+                    var_data_array = (
+                        var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
+                    )
 
-                # Handle different array dimensions
-                # If the array has a time dimension, extract the first time slice
-                monthly_burned_area = (
-                    var_data_array[0] if len(var_data_array.shape) > 2 else var_data_array
-                )
-
-                # Get coordinate information from the first file
-                if file_idx == 0:
-                    # Copy attributes from the specified variable
-                    if variable_name in netcdf_dataset.variables:
+                    # Handle different array dimensions
+                    var_monthly_data = (
+                        var_data_array[0] if len(var_data_array.shape) > 2 else var_data_array
+                    )
+                    
+                    # Sum variables (first iteration initializes, subsequent ones add)
+                    if monthly_burned_area is None:
+                        monthly_burned_area = var_monthly_data.copy()
+                    else:
+                        monthly_burned_area += var_monthly_data
+                    
+                    # Get attributes from the first variable of the first file
+                    if not attribute_dict and file_idx == 0 and var_idx == 0:
                         for attr_name in netcdf_dataset.variables[variable_name].ncattrs():
                             attribute_dict[attr_name] = getattr(
                                 netcdf_dataset.variables[variable_name], attr_name
                             )
-                    else:
-                        # Fallback to "Total" variable if specified variable doesn't exist
-                        if "Total" in netcdf_dataset.variables:
-                            for attr_name in netcdf_dataset.variables["Total"].ncattrs():
-                                attribute_dict[attr_name] = getattr(
-                                    netcdf_dataset.variables["Total"], attr_name
-                                )
-                    
-                    # Update the units to match the upscaling process
-                    attribute_dict["units"] = "m^2"
+                        # Update the units to match the upscaling process
+                        attribute_dict["units"] = "m^2"
 
+                # Skip this file if no valid variables were found
+                if monthly_burned_area is None:
+                    print(f"No valid variables found in {file}")
+                    continue
+
+                # Get coordinate information from the first file
+                if file_idx == 0:
                     # Get spatial dimensions and create coordinate arrays
                     height, width = monthly_burned_area.shape
                     latitudes = np.linspace(-90, 90, height)
@@ -351,7 +362,7 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
                     month = int(year_month[4:6])
                     print(f"Extracted year: {year}, month: {month}")
                     
-                    # Create a decimal year value for this month (e.g., 2009.0 for Jan, 2009.083 for Feb)
+                    # Create a decimal year value for this month
                     decimal_year = year + (month - 1) / 12.0
                     time_values.append(decimal_year)
                 else:
@@ -363,7 +374,6 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
                         time_values.append(float(year))
                     else:
                         print(f"Warning: Could not extract date from filename: {filename}")
-                        # Use file index as fallback time value
                         time_values.append(2001.0 + file_idx)
 
                 # Store the monthly burned area data
@@ -371,6 +381,8 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
                 
         except Exception as e:
             print(f"Error processing file {file}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
 
     # Check if we have any valid data
@@ -380,17 +392,16 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
     if latitudes is None or longitudes is None:
         raise ValueError("Could not determine coordinate information from files")
 
-    # Convert lists to arrays
+    # Convert lists to arrays and sort by time
     monthly_data_array = np.array(monthly_data_list)
     time_values = np.array(time_values)
     
-    # Sort by time if needed
     if len(time_values) > 1:
         sort_idx = np.argsort(time_values)
         monthly_data_array = monthly_data_array[sort_idx]
         time_values = time_values[sort_idx]
 
-    # Create xarray DataArray with time dimension preserved
+    # Create xarray DataArray
     total_data_array = xr.DataArray(
         monthly_data_array,
         coords={
@@ -403,6 +414,7 @@ def read_gfed5(files, upscaled=False, variable_name="Nat"):
     )
 
     print(f"Successfully processed {len(monthly_data_list)} files")
+    print(f"Variables processed: {variables}")
     print(f"Time range: {time_values.min():.3f} to {time_values.max():.3f}")
     print(f"Data shape: {total_data_array.shape}")
 
@@ -1255,7 +1267,7 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale='none'
             )
         case "BA_GFED5_upscale":
             total_value, longitude, latitude = read_gfed5(
-                files=file_paths, upscaled=True, variable_name=variables
+                files=file_paths, upscaled=True, variables=variables
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
