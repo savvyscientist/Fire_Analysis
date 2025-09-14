@@ -1,27 +1,30 @@
-import traceback
-import rasterio
-from os import listdir, makedirs, remove, mkdir
-from os.path import isfile, join, basename, exists, dirname
+# Standard library imports
 import os
 import re
-from rasterio.transform import from_origin
-import rioxarray as riox
-import numpy as np
-import netCDF4 as nc
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+import json
+import traceback
+from os import listdir, makedirs, remove, mkdir
+from os.path import isfile, join, basename, exists, dirname
+from glob import glob
+
+# Third-party imports
 import numpy as np
 import pandas as pd
-import json
-import matplotlib.dates as mdates
 import xarray as xr
-from glob import glob
+import netCDF4 as nc
 import h5py
+import rasterio
+import rioxarray as riox
+from rasterio.transform import from_origin
+from netCDF4 import Dataset
+
+# Visualization imports
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-from netCDF4 import Dataset
-import re
 
 from utilityGlobal import (
     M2TOMHA,
@@ -63,8 +66,9 @@ def extract_scaling_factor(units):
                 scaling_factor = float(10) ** float(match.group(2))
             else:
                 scaling_factor = float(match.group(1))
-        unit = match.group(4)
-        return scaling_factor, unit
+            unit = match.group(4)
+            return scaling_factor, unit
+        return 1.0, units  # No match found
     except:
         return 1.0, units  # Default scaling factor is 1 if not specified
 
@@ -177,6 +181,8 @@ def handle_units(data_array, units, monthly=False, file_path=None, year=None):
 
 
 
+# Global cache for grid areas
+_grid_area_cache = {}
 def calculate_grid_area(grid_area_shape, units="km"):
     """
     Calculate the area of each grid cell based on grid dimensions.
@@ -188,6 +194,9 @@ def calculate_grid_area(grid_area_shape, units="km"):
     Returns:
     np.ndarray: Grid area matrix with diensions matching grid_area_shape
     """
+    cache_key = (grid_area_shape, units)
+    if cache_key in _grid_area_cache:
+        return _grid_area_cache[cache_key]
 
     # Grid resolution
     nlat = grid_area_shape[0]  # Number of latitude bands
@@ -223,7 +232,7 @@ def calculate_grid_area(grid_area_shape, units="km"):
         # Assign the area to all longitude cells for this latitude band
         grid_area[i, :] = area
 
-    # Display the grid area matrix
+    _grid_area_cache[cache_key] = grid_area
     return grid_area
 
 
@@ -242,7 +251,7 @@ def obtain_netcdf_files(dir_path) -> list:
     ]
 
 
-def read_gfed5(files, upscaled=False, variable_name="Total"):
+def read_gfed5(files, upscaled=False, variable="Total"):
     """
     Reads multiple HDF5 files using h5py, preserves monthly burned area data,
     and returns the data as xarray.DataArray.
@@ -546,119 +555,190 @@ def days_to_months(month, year):
     else:
         return MONTHLISTDICT[str(month)]
 
-
-def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=False,scale=scale):
-    """
-    Reads ModelE data for given variables
-
-    Parameters:
+def read_ModelE(files, variables, monthly=False, scale='none'):
+    """         
+    Reads ModelE data for given variables                                                                                                                   
+                
+    Parameters: 
     files (list): List of file paths to ModelE data files
     variables (list): List of variable names to read and sum
     monthly (bool): If True, process as monthly data; otherwise, as annual
-
-    Returns:
+    scale (str): Scaling method ('fearth' or 'none')
+                
+    Returns:    
     tuple: (data_array, longitude, latitude)
     - data_array: xarray DataArray with Dimensions [time, lat, lon]
     - longitude: array of longitude values
     - latitude: array of latitude values
-    """
+    """         
+                
+    if not files:                 
+        raise ValueError("No files provided to read_ModelE")
+    
+    if not variables:
+        raise ValueError("Variables list cannot be empty. Please specify which variables to read.")
+    
+    if not isinstance(variables, list):
+        raise TypeError("Variables must be provided as a list")
+    
+    # Check if files exist
+    for file_path in files:      
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+               
     # Sort files to ensure chronological order
     files.sort()
     print(f"Processing {len(files)} ModelE files")
-    
-    # Initialized lists to store each year's dataset
+    print(f"Reading variables: {variables}")
+               
+    # Initialize lists to store each year's dataset
     all_data = []
     time_values = []
-
+    
+    # Initialize variables to store coordinate information from first file
+    longitude = None
+    latitude = None
+    attribute_dict = {}
+               
     # Loop over each file and process it
-    for file_path in files:
+    for file_idx, file_path in enumerate(files):
         print(f"Processing file: {file_path}")
-        ds = xr.open_dataset(file_path)
-        attribute_dict = {}
-
-        # Read dimension sizes dynamically from the dataset
-        lat_size = len(ds['lat'])
-        lon_size = len(ds['lon'])
-        modelE_var_data = np.zeros(shape=(lat_size, lon_size))
-
-        # Account for scaling of gridcells (as defined in denom of the DEFACC)
-        if scale == 'fearth':
-            modelE_var_scale = np.zeros(shape=(lat_size, lon_size))
-            scale_data = ds['axyp'].where(ds['axyp'] > 0.0, 0.0)
-            scale_data = scale_data * ds['soilfr'].where(ds['soilfr'] > 0.0, 0.0)
-
-        # Sum up all requested variables
-        for variable in variables:
-            # where function replaces values that do not meet the parameters condition
-            # (replaces all values that are not greater than 0)
-            var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
-            if scale == 'fearth':
-                var_data *= scale_data
-            modelE_var_data = modelE_var_data + var_data
-
-            # Get attributes from the first variable
-            if not attribute_dict:
-                for attr_name in ds[variable].attrs:
-                    attribute_dict[attr_name] = getattr(ds[variable], attr_name)
-               # Extract scaling factor from units
-               units = attribute_dict.get('units', '')
-               scaling_factor, units = extract_scaling_factor(units)
-               attribute_dict['units'] = units
-
-        # Apply scaling factor
-        modelE_var_data *= scaling_factor
-
-        if monthly:
-            # Extract year from filename
-            try:
-                year = int(file_path.split(".")[0][-4:])
-                
-                # Extract month from filename (e.g. JAN, FEB, etc.)
-                month = file_path.split(".")[0][-7:-4]
-                # Convert month name to number (0-11)
-                month_num = MONTHLIST.index(month)
-                
-                # Create decimal year value (e.g., 2009.0 for Jan, 2009.083 for Feb)
-                decimal_year = year + month_num/12.0
-                
-                print(f"Extracted year: {year}, month: {month} ({month_num+1}), decimal: {decimal_year:.3f}")
-            except:
-                # Fallback to just using the order in the file list if filename parsing fails
-                print(f"WARNING: Failed to extract month/year from filename. Using file order instead.")
-                year = 2009  # Default year
-                month_num = len(time_values) % 12
-                decimal_year = year + month_num/12.0
+        
+        try:
+            ds = xr.open_dataset(file_path)
             
-            time_values.append(decimal_year)
-        else:
-            # For annual data, just use the year
-            year = int(file_path.split("ANN")[1][:4])
-            time_values.append(year)
+            # Store coordinates from first file
+            if file_idx == 0:
+                longitude = ds['lon']
+                latitude = ds['lat']
+                
+            # Read dimension sizes dynamically from the dataset
+            lat_size = len(ds['lat'])
+            lon_size = len(ds['lon'])
+            modelE_var_data = np.zeros(shape=(lat_size, lon_size))
+                   
+            # Account for scaling of gridcells (as defined in denom of the DEFACC)
+            scale_data = None
+            if scale == 'fearth':
+                if 'axyp' in ds.variables and 'soilfr' in ds.variables:
+                    scale_data = ds['axyp'].where(ds['axyp'] > 0.0, 0.0)
+                    scale_data = scale_data * ds['soilfr'].where(ds['soilfr'] > 0.0, 0.0)
+                else:
+                    print(f"Warning: Required scaling variables 'axyp' or 'soilfr' not found in {file_path}")
+                   
+            # Initialize scaling factor for this file
+            scaling_factor = 1.0
+            
+            # Sum up all requested variables
+            variables_found = []
+            for variable in variables:
+                if variable not in ds.variables:
+                    print(f"Warning: Variable '{variable}' not found in {file_path}")
+                    continue
+                    
+                variables_found.append(variable)
 
-        # Append data
-        all_data.append(modelE_var_data)
-
+                # where function replaces values that do not meet the parameters condition
+                # (replaces all values that are not greater than 0)
+                var_data = ds[variable].where(ds[variable] > 0.0, 0.0)
+                
+                if scale == 'fearth' and scale_data is not None:
+                    var_data = var_data * scale_data
+                    
+                modelE_var_data = modelE_var_data + var_data
+                    
+                # Get attributes from the first variable of the first file
+                if not attribute_dict and file_idx == 0:
+                    for attr_name in ds[variable].attrs:
+                        attribute_dict[attr_name] = getattr(ds[variable], attr_name)
+                    
+                    # Extract scaling factor from units
+                    units = attribute_dict.get('units', '')
+                    scaling_factor, units = extract_scaling_factor(units)
+                    attribute_dict['units'] = units
+            
+            # Check if any variables were found in this file
+            if not variables_found:
+                print(f"Error: None of the requested variables {variables} were found in {file_path}")
+                continue
+                    
+            # Apply scaling factor
+            modelE_var_data = modelE_var_data * scaling_factor
+                    
+            # Handle time extraction
+            if monthly:
+                # Extract year from filename
+                try:
+                    year = int(file_path.split(".")[0][-4:])
+                    
+                    # Extract month from filename (e.g. JAN, FEB, etc.)
+                    month = file_path.split(".")[0][-7:-4]
+                    # Convert month name to number (0-11)
+                    month_num = MONTHLIST.index(month)
+                    
+                    # Create decimal year value (e.g., 2009.0 for Jan, 2009.083 for Feb)
+                    decimal_year = year + month_num/12.0
+                    
+                    print(f"Extracted year: {year}, month: {month} ({month_num+1}), decimal: {decimal_year:.3f}")
+                except (ValueError, IndexError, AttributeError) as e:
+                    # Fallback to just using the order in the file list if filename parsing fails
+                    print(f"WARNING: Failed to extract month/year from filename: {e}. Using file order instead.")
+                    year = 2009  # Default year
+                    month_num = len(time_values) % 12
+                    decimal_year = year + month_num/12.0
+                    
+                time_values.append(decimal_year)
+            else:   
+                # For annual data, just use the year
+                try:
+                    year = int(file_path.split("ANN")[1][:4])
+                except (ValueError, IndexError):
+                    print(f"WARNING: Could not extract year from annual filename: {file_path}")
+                    year = 2009 + file_idx  # Fallback
+                time_values.append(year)
+                 
+            # Append data
+            print(f"Extracted year: {year}, month: {month} ({month_num+1}), decimal: {decimal_year:.3f}")
+            all_data.append(modelE_var_data)
+            
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            continue
+        finally:
+            # Always close the dataset
+            if 'ds' in locals():
+                ds.close()
+                 
+    if not all_data:
+        raise ValueError("No valid data was processed from any files")
+        
     # Convert lists to arrays
     all_data = np.array(all_data)
     time_values = np.array(time_values)
-    
+             
     # Sort by time value if needed
     if len(time_values) > 1:
         sort_idx = np.argsort(time_values)
         all_data = all_data[sort_idx]
         time_values = time_values[sort_idx]
-
+             
     # Create xarray DataArray
     modelE_all_year = xr.DataArray(
-            all_data,
-            dims=['time', 'lat', 'lon'],
-            coords={
-                'time': time_values,
-                'lat': ds['lat'].values,
-                'lon': ds['lon'].values
-                },
-            attrs=attribute_dict
-            )
+        all_data,
+        dims=['time', 'lat', 'lon'],
+        coords={
+            'time': time_values,
+            'lat': latitude.values,
+            'lon': longitude.values
+        },
+        attrs=attribute_dict
+    )
+    
+    # Before handle_units
+    print(f"Before handle_units - Data shape: {modelE_all_year.shape}")
+    print(f"Before handle_units - Sample values: {modelE_all_year.values.flat[:5]}")
+    print(f"Before handle_units - Data sum: {modelE_all_year.sum().item()}")
+
 
     # Handle units conversion and time scaling
     modelE_all_year, new_units = handle_units(
@@ -667,11 +747,19 @@ def read_ModelE(files, variables=["BA_tree", "BA_shrub", "BA_grass"], monthly=Fa
         monthly=monthly,
         file_path=files[0] if monthly else None,  # Pass file_path for monthly data
         year=int(time_values[0]) if monthly else None    # Pass year for monthly data
-    )
+    )        
 
+    # After handle_units
+    print(f"After handle_units - Data shape: {modelE_all_year.shape}")
+    print(f"After handle_units - Sample values: {modelE_all_year.values.flat[:5]}")
+    print(f"After handle_units - Data sum: {modelE_all_year.sum().item()}")
+    print(f"Units changed from '{attribute_dict.get('units', '')}' to '{new_units}'")
+
+             
     modelE_all_year.attrs["units"] = new_units
     print(f"ModelE data time values: {time_values}")
-    return modelE_all_year, ds["lon"], ds["lat"]
+    
+    return modelE_all_year, longitude, latitude
 
 def read_lightning_data(files, yearly=True, upscaled=False):
     """
@@ -962,7 +1050,7 @@ def map_plot(
     except Exception as e:
         print(f"Error calculating global total: {e}")
         global_total = "N/A"
-	
+
     # Set a more reasonable colorbar max for better visualization
     if cbarmax is None:
         if len(positive_data) > 0:
@@ -1104,7 +1192,7 @@ def time_series_plot(
     
     return axis
 
-def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale):
+def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale='none'):
     match (NetCDF_Type):
         case "BA_GFED4":
             total_value, longitude, latitude = read_gfed4s(
@@ -1120,11 +1208,11 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale):
             )
         case "BA_GFED5_upscale":
             total_value, longitude, latitude = read_gfed5(
-                files=file_paths, upscaled=True
+                files=file_paths, upscaled=True, variable=variable
             )
         case "ModelE":
             total_value, longitude, latitude = read_ModelE(
-                files=file_paths, variables=variables
+                files=file_paths, variables=variables, scale=scale
             )
         case "ModelE_Monthly":
             total_value, longitude, latitude = read_ModelE(
@@ -1155,118 +1243,137 @@ def obtain_time_series_xarray(
 ):
     """
     Calculates the mean and the interannual variability
+    Returns:
+        tuple: (time_mean_data, data_per_year_stack, longitude, latitude, units, start_year, end_year)
+        or (None, None, None, None, None, None, None) if error occurs
     """
 
-    file_paths = obtain_netcdf_files(NetCDF_folder_Path)
-    print(f"\nProcessing {NetCDF_Type}...")
-    total_value, longitude, latitude = handle_time_extraction_type(
-        file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type,scale=scale
-    )
+    try:
+        file_paths = obtain_netcdf_files(NetCDF_folder_Path)
 
-    time_dimension = total_value.dims[0]
-    sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
-    # Debug prints
-    print(f"Time dimension: {time_dimension}")
-    print(f"Time values: {total_value.coords['time'].values}")
+        if not file_paths:
+            print(f"Warning: No netCDF files found in {NetCDF_folder_Path}")
+            return None, None, None, None, None, None, None
 
-    time_mean_data = total_value.mean(dim="time")
-    print(f"Shape of time_mean_data: {time_mean_data.shape}")
-
-    units = total_value.attrs["units"]
-    print(f"Units: {units}")
-
-    # Calculate spatial sums based on units 
-    if " m-2".lower() in units or " m^-2".lower() in units:
-        grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
-        grid_cell_area = calculate_grid_area(
-            grid_area_shape=grid_cell_dimension_shape, units="m^2"
+        print(f"\nProcessing {NetCDF_Type}...")
+        total_value, longitude, latitude = handle_time_extraction_type(
+            file_paths=file_paths, variables=variables, NetCDF_Type=NetCDF_Type,scale='none'
         )
-        total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
-        print("Data Array multiplied by grid_cell_area")
-    else:
-        total_data_array = total_value.sum(dim=sum_dimensions).values
-        print("Regular Sum Implemented")
 
-    # Get time values
-    time_values = total_value.coords["time"].values
-    years = np.unique(time_values)
-    start_year = years[0]
-    end_year = years[-1]
+        if total_value is None:
+            print(f"Error: Failed to extract data for {NetCDF_Type}")
+            return None, None, None, None, None, None, None
 
-    # Check if we have monthly data
-    is_monthly = len(total_data_array) > len(years)
+        time_dimension = total_value.dims[0]
+        sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
 
-    if is_monthly:
-        print(f"Found monthly data ({len(total_data_array)} months for {len(years)} years)")
-        if annual:
-            print("Aggregating to annual totals")
-            # Check if the data has 12 months per year
-            if len(total_data_array) == len(years) * 12:
-                # Reshape to (nyears, 12) and sum over months
-                monthly_totals = total_data_array.reshape(len(years), 12)
-                total_data_array = monthly_totals.sum(axis=1)
-                time_values = years
-            else:
-                print(f"Warning: Number of months ({len(total_data_array)}) is not 12 times the number of years ({len(years)})")
-                print("Proceeding with original data without reshaping")
-                if annual:
-                    # Create yearly values by averaging months
-                    yearly_data = {}
-                    for i, t in enumerate(time_values):
-                        year = int(t)
-                        if year in yearly_data:
-                            yearly_data[year].append(total_data_array[i])
-                        else:
-                            yearly_data[year] = [total_data_array[i]]
-                    
-                    # Average the months for each year
-                    time_values = np.array(list(yearly_data.keys()))
-                    total_data_array = np.array([np.mean(vals) for vals in yearly_data.values()])
+        # Debug prints
+        print(f"Time dimension: {time_dimension}")
+        print(f"Time values: {total_value.coords['time'].values}")
+
+        time_mean_data = total_value.mean(dim="time")
+        print(f"Shape of time_mean_data: {time_mean_data.shape}")
+
+        units = total_value.attrs["units"]
+        print(f"Units: {units}")
+
+        # Calculate spatial sums based on units 
+        if " m-2".lower() in units or " m^-2".lower() in units:
+            grid_cell_dimension_shape = (total_value.shape[-2], total_value.shape[-1])
+            grid_cell_area = calculate_grid_area(
+                grid_area_shape=grid_cell_dimension_shape, units="m^2"
+            )
+            total_data_array = (total_value * grid_cell_area).sum(dim=sum_dimensions).values
+            print("Data Array multiplied by grid_cell_area")
         else:
-            print("Keeping monthly resolution")
-            # For monthly data create decimal years (e.g. 2009.0, 2009.083, ...)
-            if len(time_values) == len(total_data_array):
-                # If time_values already has proper decimal years, use them
-                print("Using provided time values")
+            total_data_array = total_value.sum(dim=sum_dimensions).values
+            print("Regular Sum Implemented")
+
+        # Get time values
+        time_values = total_value.coords["time"].values
+        years = np.unique(time_values)
+        start_year = years[0]
+        end_year = years[-1]
+
+        # Check if we have monthly data
+        is_monthly = len(total_data_array) > len(years)
+
+        if is_monthly:
+            print(f"Found monthly data ({len(total_data_array)} months for {len(years)} years)")
+            if annual:
+                print("Aggregating to annual totals")
+                # Check if the data has 12 months per year
+                if len(total_data_array) == len(years) * 12:
+                    # Reshape to (nyears, 12) and sum over months
+                    monthly_totals = total_data_array.reshape(len(years), 12)
+                    total_data_array = monthly_totals.sum(axis=1)
+                    time_values = years
+                else:
+                    print(f"Warning: Number of months ({len(total_data_array)}) is not 12 times the number of years ({len(years)})")
+                    print("Proceeding with original data without reshaping")
+                    if annual:
+                        # Create yearly values by averaging months
+                        yearly_data = {}
+                        for i, t in enumerate(time_values):
+                            year = int(t)
+                            if year in yearly_data:
+                                yearly_data[year].append(total_data_array[i])
+                            else:
+                                yearly_data[year] = [total_data_array[i]]
+                        
+                        # Average the months for each year
+                        time_values = np.array(list(yearly_data.keys()))
+                        total_data_array = np.array([np.mean(vals) for vals in yearly_data.values()])
             else:
-                # Otherwise, create decimal years
-                print("Creating decimal year values for months")
-                # Create months array from 0 to 11
-                months = np.arange(12)
-                # Create decimal years by adding month fractions to each year
-                time_values = np.array([year + month/12 for year in years for month in months])
+                print("Keeping monthly resolution")
+                # For monthly data create decimal years (e.g. 2009.0, 2009.083, ...)
+                if len(time_values) == len(total_data_array):
+                    # If time_values already has proper decimal years, use them
+                    print("Using provided time values")
+                else:
+                    # Otherwise, create decimal years
+                    print("Creating decimal year values for months")
+                    # Create months array from 0 to 11
+                    months = np.arange(12)
+                    # Create decimal years by adding month fractions to each year
+                    time_values = np.array([year + month/12 for year in years for month in months])
                 
-                # Make sure the length matches total_data_array
-                if len(time_values) > len(total_data_array):
-                    time_values = time_values[:len(total_data_array)]
+                    # Make sure the length matches total_data_array
+                    if len(time_values) > len(total_data_array):
+                        time_values = time_values[:len(total_data_array)]
                 
-                print(f"Created {len(time_values)} time points")
+                    print(f"Created {len(time_values)} time points")
 
-    print(f"Time values shape: {time_values.shape}")
-    print(f"Total data array shape: {total_data_array.shape}")
-    print(f"First few time values: {time_values[:5]}")
+        print(f"Time values shape: {time_values.shape}")
+        print(f"Total data array shape: {total_data_array.shape}")
+        print(f"First few time values: {time_values[:5]}")
 
-    # Make sure the lengths match before creating column stack
-    if len(time_values) != len(total_data_array):
-        print(f"Warning: Length mismatch between time_values ({len(time_values)}) and total_data_array ({len(total_data_array)})")
-        # Fix by truncating to the shorter length
-        min_length = min(len(time_values), len(total_data_array))
-        time_values = time_values[:min_length]
-        total_data_array = total_data_array[:min_length]
-        print(f"Truncated both arrays to length {min_length}")
+        # Make sure the lengths match before creating column stack
+        if len(time_values) != len(total_data_array):
+            print(f"Warning: Length mismatch between time_values ({len(time_values)}) and total_data_array ({len(total_data_array)})")
+            # Fix by truncating to the shorter length
+            min_length = min(len(time_values), len(total_data_array))
+            time_values = time_values[:min_length]
+            total_data_array = total_data_array[:min_length]
+            print(f"Truncated both arrays to length {min_length}")
 
-    data_per_year_stack = np.column_stack((time_values, total_data_array))
-    print(f"Final stacked shape: {data_per_year_stack.shape}")
+        data_per_year_stack = np.column_stack((time_values, total_data_array))
+        print(f"Final stacked shape: {data_per_year_stack.shape}")
 
-    return (
-        time_mean_data,
-        data_per_year_stack,
-        longitude,
-        latitude,
-        units,
-        int(start_year),
-        int(end_year),
-    )
+        return (
+            time_mean_data,
+            data_per_year_stack,
+            longitude,
+            latitude,
+            units,
+            int(start_year),
+            int(end_year),
+        )
+
+    except Exception as e:
+        print(f"Error in obtain_time_series_xarray: {str(e)}")
+        print(f"Error details: {traceback.format_exc()}")
+        return None, None, None, None, None, None, None
 
 
 def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=False):
@@ -1452,7 +1559,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
 
     # Set the title and labels for the time series plot
     if annual:
-        xlabel = f"{time_analysis_figure_data['xlabel']} ({global_year_min}-{global_year_max})"
+        xlabel = f"Yearly Data ({global_year_min}-{global_year_max})"
     else:
         xlabel = f"Monthly Data ({global_year_min})"
     time_analysis_axis.set_title(time_analysis_figure_data["title"])
@@ -1490,96 +1597,133 @@ def run_time_series_diff_analysis(folder_data_one, folder_data_two):
         - end_year : int, ending year
         - figure_label : str, label for the figure
     """
-    folder_path_one, figure_data_one, file_type_one, variables_one = (
-        folder_data_one["folder_path"],
-        folder_data_one["figure_data"],
-        folder_data_one["file_type"],
-        folder_data_one["variables"],
-    )
+    try:
+        # Extract data from folder dictionaries
+        folder_path_one, figure_data_one, file_type_one, variables_one = (
+            folder_data_one["folder_path"],
+            folder_data_one["figure_data"],
+            folder_data_one["file_type"],
+            folder_data_one["variables"],
+        )
 
-    folder_path_two, figure_data_two, file_type_two, variables_two = (
-        folder_data_two["folder_path"],
-        folder_data_two["figure_data"],
-        folder_data_two["file_type"],
-        folder_data_two["variables"],
-    )
+        folder_path_two, figure_data_two, file_type_two, variables_two = (
+            folder_data_two["folder_path"],
+            folder_data_two["figure_data"],
+            folder_data_two["file_type"],
+            folder_data_two["variables"],
+        )
 
-    # Obtain data for both datasets
-    print(f"Getting data for dataset 1: {file_type_one}")
-    (
-        time_mean_data_one,
-        data_per_year_stack_one,
-        longitude_one,
-        latitude_one,
-        units_one,
-        start_year_one,
-        end_year_one,
-    ) = obtain_time_series_xarray(
-        NetCDF_folder_Path=folder_path_one,
-        NetCDF_Type=file_type_one,
-        variables=variables_one,
-    )
+        # Obtain data for both datasets
+        print(f"Getting data for dataset 1: {file_type_one}")
+        result_one = obtain_time_series_xarray(
+            NetCDF_folder_Path=folder_path_one,
+            NetCDF_Type=file_type_one,
+            variables=variables_one,
+            annual=annual
+        )
 
-    print(f"Getting data for dataset 2: {file_type_two}")
-    (
-        time_mean_data_two,
-        data_per_year_stack_two,
-        longitude_two,
-        latitude_two,
-        units_two,
-        start_year_two,
-        end_year_two,
-    ) = obtain_time_series_xarray(
-        NetCDF_folder_Path=folder_path_two,
-        NetCDF_Type=file_type_two,
-        variables=variables_two,
-    )
+        if result_one[0] is None:
+            print(f"Error: Failed to load dataset 1: {file_type_one}")
+            return None, None, None, None, None, None, None, None
 
-    # Check if units are compatible for subtraction
-    if units_one != units_two:
-        print(f"WARNING: Units do not match! {units_one} vs {units_two}")
-        print("Cannot perform subtraction with different units.")
-        print("Continuing with calculation, but results may not be meaningful.")
+        (time_mean_data_one, data_per_year_stack_one, longitude_one,
+         latitude_one, units_one, start_year_one, end_year_one) = result_one
 
-    # Calculate the difference in spatial means
-    time_mean_data_diff = time_mean_data_one.copy()
-    time_mean_data_diff.values = time_mean_data_one.values - time_mean_data_two.values
+        print(f"Getting data for dataset 2: {file_type_two}")
+        result_two = obtain_time_series_xarray(
+            NetCDF_folder_Path=folder_path_two,
+            NetCDF_Type=file_type_two,
+            variables=variables_two,
+            annual=annual
+        )
+
+        if result_two[0] is None:
+            print(f"Error: Failed to load dataset 2: {file_type_two}")
+            return None, None, None, None, None, None, None, None
+
+        (time_mean_data_two, data_per_year_stack_two, longitude_two,
+         latitude_two, units_two, start_year_two, end_year_two) = result_two
+
+        # Check if units are compatible for subtraction
+        if units_one != units_two:
+            print(f"WARNING: Units do not match! {units_one} vs {units_two}")
+            print("Cannot perform subtraction with different units.")
+            print("Continuing with calculation, but results may not be meaningful.")
+
+        # Check spatial grid compatibility
+        if (time_mean_data_one.shape != time_mean_data_two.shape):
+            print(f"WARNING: Spatial grids do not match!")
+            print(f"Dataset 1 shape: {time_mean_data_one.shape}")
+            print(f"Dataset 2 shape: {time_mean_data_two.shape}")
+            print("Cannot perform spatial subtraction with different grids.")
+            return None, None, None, None, None, None, None, None
+
+        # Calculate the difference in spatial means
+        time_mean_data_diff = time_mean_data_one.copy()
+        time_mean_data_diff.values = time_mean_data_one.values - time_mean_data_two.values
     
-    # Calculate the difference in time series data
-    print(f"Shape of data_per_year_stack_two: {data_per_year_stack_two.shape}")
-    print(f"Shape of data_per_year_stack_one: {data_per_year_stack_one.shape}")
-    
-    # Handle case where shapes might not match
-    if data_per_year_stack_one.shape[0] < data_per_year_stack_two.shape[0]:
-        print("Datasets have different lengths - truncating the second dataset")
-        data_per_year_stack_diff = data_per_year_stack_one.copy()
-        data_per_year_stack_diff[:, 1] = data_per_year_stack_one[:, 1] - data_per_year_stack_two[:data_per_year_stack_one.shape[0], 1]
-    elif data_per_year_stack_one.shape[0] > data_per_year_stack_two.shape[0]:
-        print("Datasets have different lengths - truncating the first dataset")
-        data_per_year_stack_diff = data_per_year_stack_two.copy()
-        data_per_year_stack_diff[:, 1] = data_per_year_stack_one[:data_per_year_stack_two.shape[0], 1] - data_per_year_stack_two[:, 1]
-    else:
-        # Same shape, straightforward subtraction
-        data_per_year_stack_diff = data_per_year_stack_one.copy()
-        data_per_year_stack_diff[:, 1] = data_per_year_stack_one[:, 1] - data_per_year_stack_two[:, 1]
+        # Calculate the difference in time series data
+        print(f"Shape of data_per_year_stack_two: {data_per_year_stack_two.shape}")
+        print(f"Shape of data_per_year_stack_one: {data_per_year_stack_one.shape}")
 
-    min_year = min(
-        data_per_year_stack_one[:, 0].min(), data_per_year_stack_two[:, 0].min()
-    )
+                # Extract time arrays
+        time_one = data_per_year_stack_one[:, 0]
+        time_two = data_per_year_stack_two[:, 0]
 
-    for index in range(len(data_per_year_stack_diff)):
-        data_per_year_stack_diff[index][0] = min_year + index
+        # Find common time points with tolerance for floating point comparison
+        tolerance = 1e-6
+        common_times = []
 
-    # Create a descriptive figure label
-    figure_label = f"{figure_data_one['label']} - {figure_data_two['label']}"
+        for t1 in time_one:
+            # Check if this time exists in time_two within tolerance
+            matches = np.abs(time_two - t1) < tolerance
+            if np.any(matches):
+                common_times.append(t1)
 
-    return (
-        time_mean_data_diff,
-        data_per_year_stack_diff,
-        longitude_one,
-        latitude_one,
-        units_one, # Use the units from the first dataset
-        start_year_one,
-        end_year_one,
-        figure_label,
-    )
+        common_times = np.array(common_times)
+
+        if len(common_times) == 0:
+            print("ERROR: No common time points between datasets! Cannot calculate difference.")
+            return None, None, None, None, None, None, None, None
+
+        print(f"Found {len(common_times)} common time points")
+
+        # Create difference array for common time points
+        data_per_year_stack_diff = np.zeros((len(common_times), 2))
+        data_per_year_stack_diff[:, 0] = common_times
+
+        for i, t in enumerate(common_times):
+            # Find indices for this time point in both datasets
+            idx1 = np.argmin(np.abs(time_one - t))
+            idx2 = np.argmin(np.abs(time_two - t))
+
+            # Calculate difference
+            data_per_year_stack_diff[i, 1] = (data_per_year_stack_one[idx1, 1] -
+                                            data_per_year_stack_two[idx2, 1])
+
+        # Determine year range from common times
+        start_year_diff = int(np.floor(common_times.min()))
+        end_year_diff = int(np.ceil(common_times.max()))
+
+        # Create a descriptive figure label
+        figure_label = f"{figure_data_one['label']} - {figure_data_two['label']} ({start_year_diff}-{end_year_diff})"
+
+        print(f"Difference calculation completed successfully")
+        print(f"Time range: {start_year_diff} - {end_year_diff}")
+        print(f"Units: {units_one}")
+
+        return (
+            time_mean_data_diff,
+            data_per_year_stack_diff,
+            longitude_one,  # Use coordinates from first dataset
+            latitude_one,
+            units_one,      # Use units from first dataset
+            start_year_diff,
+            end_year_diff,
+            figure_label,
+        )
+
+    except Exception as e:
+        print(f"Error in run_time_series_diff_analysis: {str(e)}")
+        print(f"Error details: {traceback.format_exc()}")
+        return None, None, None, None, None, None, None, None
