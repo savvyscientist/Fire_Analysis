@@ -250,68 +250,70 @@ def obtain_netcdf_files(dir_path) -> list:
         and (file.split(".")[-1] == "hdf5" or file.split(".")[-1] == "nc")
     ]
 
-
 def read_gfed5(files, variables=None, upscaled=False):
     """
     Reads multiple netCDF files using netCDF4.Dataset, preserves monthly burned area data,
     and returns the data as xarray.DataArray.
-    
+
     Parameters:
     -----------
     files : list
         List of paths to GFED5 netCDF files
-    variables : list or None
-        List of variable names to read and sum. If None, defaults to ["Total"]
+    variables : list or None, optional
+        List of variable names to read and sum. If None, defaults to ["Total"] (default: None)
     upscaled : bool, optional
         If True, data is already in m^2; if False, convert from km^2 to m^2 (default: False)
-        
+
     Returns:
     --------
     tuple : (total_data_array, longitudes, latitudes)
+        - total_data_array: xarray DataArray with dimensions [time, latitude, longitude]
+        - longitudes: longitude coordinate array
+        - latitudes: latitude coordinate array
     """
+    monthly_data_list = []
+    time_values = []
+    attribute_dict = {}
+
     # Set default variables if none provided
     if variables is None:
         variables = ["Total"]
     elif isinstance(variables, str):
         variables = [variables]  # Convert single string to list
-    
+
     if not variables:
         raise ValueError("Variables list cannot be empty")
-    
-    monthly_data_list = []
-    time_values = []
-    attribute_dict = {}
-    
+
     # Sort files to ensure chronological order
     files.sort()
-    
+
     if not files:
         raise ValueError("No files provided to read_gfed5")
-    
+
     # Initialize coordinate variables
     latitudes = None
     longitudes = None
-    
+
     for file_idx, file in enumerate(files):
         if not os.path.exists(file):
             print(f"Warning: File not found: {file}")
             continue
-            
+
         try:
             with Dataset(file) as netcdf_dataset:
                 # Initialize data array for this file
                 monthly_burned_area = None
-                
+
                 # Process each variable and sum them
                 for var_idx, variable_name in enumerate(variables):
                     if variable_name not in netcdf_dataset.variables:
                         print(f"Warning: Variable '{variable_name}' not found in {file}")
                         print(f"Available variables: {list(netcdf_dataset.variables.keys())}")
                         continue
-                    
+
                     # Read the variable from the netCDF dataset
                     var_data_array = netcdf_dataset.variables[variable_name][:]
-                    
+
                     # Convert units from km^2 to m^2 if not already upscaled
                     var_data_array = (
                         var_data_array if upscaled else var_data_array * KM_SQUARED_TO_M_SQUARED
@@ -321,14 +323,14 @@ def read_gfed5(files, variables=None, upscaled=False):
                     var_monthly_data = (
                         var_data_array[0] if len(var_data_array.shape) > 2 else var_data_array
                     )
-                    
+
                     # Sum variables (first iteration initializes, subsequent ones add)
                     if monthly_burned_area is None:
                         monthly_burned_area = var_monthly_data.copy()
                     else:
                         monthly_burned_area += var_monthly_data
-                    
-                    # Get attributes from the first variable of the first file
+
+                    # Get coordinate information from the first variable of the first file
                     if not attribute_dict and file_idx == 0 and var_idx == 0:
                         for attr_name in netcdf_dataset.variables[variable_name].ncattrs():
                             attribute_dict[attr_name] = getattr(
@@ -361,7 +363,7 @@ def read_gfed5(files, variables=None, upscaled=False):
                     year = int(year_month[:4])
                     month = int(year_month[4:6])
                     print(f"Extracted year: {year}, month: {month}")
-                    
+
                     # Create a decimal year value for this month
                     decimal_year = year + (month - 1) / 12.0
                     time_values.append(decimal_year)
@@ -378,7 +380,7 @@ def read_gfed5(files, variables=None, upscaled=False):
 
                 # Store the monthly burned area data
                 monthly_data_list.append(monthly_burned_area)
-                
+
         except Exception as e:
             print(f"Error processing file {file}: {e}")
             import traceback
@@ -395,7 +397,7 @@ def read_gfed5(files, variables=None, upscaled=False):
     # Convert lists to arrays and sort by time
     monthly_data_array = np.array(monthly_data_list)
     time_values = np.array(time_values)
-    
+
     if len(time_values) > 1:
         sort_idx = np.argsort(time_values)
         monthly_data_array = monthly_data_array[sort_idx]
@@ -917,7 +919,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                 latitudes,
             )
 
-
 def define_subplot(
     fig,
     ax,
@@ -937,14 +938,38 @@ def define_subplot(
     logMap=False,
 ):
     """Define the properties of a subplot with optional difference normalization.""" 
-    # labelpad sets the distance of the colorbar from the map
+    
+    # Check for None data
+    if decade_data is None:
+        print("Error: decade_data is None")
+        return ax
+
+    # Convert to numpy if needed
+    data_np = decade_data.values if hasattr(decade_data, 'values') else decade_data
+    
     # Only use default scaling if masx is None 
     if masx is None: 
-        masx = decade_data.max().item() 
+        masx = np.nanmax(data_np)
         print(f"Auto-setting masx to {masx}")
 
-    # Mask values that are less than or equal to zero
-    masked_data = np.ma.masked_where(decade_data <= 0, decade_data)
+    # Create mask for visualization
+    # For burned area data, we want to show very small positive values
+    if "BA" in title.upper() or "BURN" in title.upper():
+        # For burned area, mask only truly zero values and negatives
+        masked_data = np.ma.masked_where((data_np <= 0) | np.isnan(data_np), data_np)
+        print(f"Burned area masking: masking values <= 0")
+    else:
+        # For other data, use the original threshold
+        masked_data = np.ma.masked_where((data_np <= 0) | np.isnan(data_np), data_np)
+
+    # Check if we have any unmasked data
+    if np.ma.count(masked_data) == 0:
+        print("Warning: All data is masked! Adjusting masking strategy...")
+        # Try less restrictive masking
+        masked_data = np.ma.masked_where(np.isnan(data_np), data_np)
+        if np.ma.count(masked_data) == 0:
+            print("Error: Still no valid data after relaxed masking")
+            return ax
     
     # Print mask information for debugging
     mask_percentage = np.ma.count_masked(masked_data) / masked_data.size * 100
@@ -952,7 +977,7 @@ def define_subplot(
 
     # Set up the map
     ax.coastlines(color="black")
-    ax.add_feature(cfeature.LAND, edgecolor="gray")
+    ax.add_feature(cfeature.LAND, edgecolor="gray", alpha=0.5)
     ax.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=1)
 
     # Creare a two-line title if global total is provided 
@@ -964,7 +989,7 @@ def define_subplot(
 
     # Handling difference normalization (if is_diff is true)
     if is_diff:
-        data_min, data_max = decade_data.min(), decade_data.max()
+        data_min, data_max = np.nanmin(data_np), np.nanmax(data_np)
         if data_min == data_max:
             norm = mcolors.Normalize(vmin=data_min - 1, vmax=data_max + 1)
         else:
@@ -973,7 +998,7 @@ def define_subplot(
         p = ax.pcolormesh(
             lons,
             lats,
-            decade_data,
+            data_np,
             transform=ccrs.PlateCarree(),
             cmap="bwr",
             norm=norm,
@@ -986,18 +1011,18 @@ def define_subplot(
         cmap.set_bad('white')
 
         # Check if data has any positive values for log scale
-        log_compatible = np.ma.count(masked_data) > 0
+        log_compatible = np.ma.count(masked_data) > 0 and np.ma.min(masked_data) > 0
         
         if logMap and log_compatible:
             # For log plots, ensure vmin is positive
             try:
-                # Try to get the minimum non-masked value
-                if np.ma.count(masked_data) > 0:
-                    vmin = max(np.ma.min(masked_data) * 0.9, 1e-10)
-                else:
-                    vmin = 1e-10
-
-                print(f"Log scale vmin: {vmin}, vmax: {masx}")
+                vmin = max(np.ma.min(masked_data) * 0.1, 1e-12)  # Even smaller minimum
+                print(f"Log scale vmin: {vmin:.2e}, vmax: {masx:.2e}")
+                
+                if vmin >= masx:
+                    vmin = masx * 0.01
+                    print(f"Adjusted vmin to {vmin:.2e} (1% of vmax)")
+                
                 logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
                 p = ax.pcolormesh(
                     lons,
@@ -1007,34 +1032,45 @@ def define_subplot(
                     cmap=cmap,
                     norm=logNorm,
                 )
-            except ValueError as e:
+            except (ValueError, RuntimeError) as e:
                 print(f"Warning: Log scale error - {e}. Switching to linear scale")
-                # For linear plots, use the full range
+                # For linear plots, use a very small vmin to show small values
+                vmin = np.ma.min(masked_data) if np.ma.count(masked_data) > 0 else 0
                 p = ax.pcolormesh(
                     lons,
                     lats,
                     masked_data,
                     transform=ccrs.PlateCarree(),
                     cmap=cmap,
-                    vmin=0.0,
+                    vmin=vmin,
                     vmax=masx,
                 )
         else:
-            # Linear scale
+            # Linear scale - use very small vmin for burned area data
+            if "BA" in title.upper() or "BURN" in title.upper():
+                vmin = np.ma.min(masked_data) if np.ma.count(masked_data) > 0 else 0
+                if vmin == 0 and np.ma.count(masked_data) > 0:
+                    # Find smallest positive value
+                    positive_vals = masked_data[masked_data > 0]
+                    if len(positive_vals) > 0:
+                        vmin = np.min(positive_vals) * 0.1
+            else:
+                vmin = 0.0
+                
+            print(f"Linear scale vmin: {vmin:.2e}, vmax: {masx:.2e}")
             p = ax.pcolormesh(
                 lons,
                 lats,
                 masked_data,
                 transform=ccrs.PlateCarree(),
                 cmap=cmap,
-                vmin=0.0,
+                vmin=vmin,
                 vmax=masx,
             )
 
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
     return ax
-
 
 def map_plot(
     figure,
@@ -1057,65 +1093,91 @@ def map_plot(
     Parameters:
     decade_data (xarray.DataArray): The spatial data to plot
     """
-    
+
+    # Check if decade_data is None
+    if decade_data is None:
+        print("Error: decade_data is None, cannot create map")
+        return
+
     # Try to convert to numpy safely
     try:
-        data_np = decade_data.values
+        data_np = decade_data.values if hasattr(decade_data, 'values') else decade_data
         print(f"Data array shape: {data_np.shape}")
-        print(f"Data range: min={decade_data.min().item():.5e}, max={decade_data.max().item():.5e}")
-        
+        print(f"Data range: min={data_np.min():.5e}, max={data_np.max():.5e}")
+
+        # Get statistics for all data (including zeros)
+        non_nan_data = data_np[~np.isnan(data_np)]
+        print(f"Non-NaN values: {len(non_nan_data)} out of {data_np.size}")
+
         # Get positive data only for better scaling
-        positive_data = data_np[data_np > 0]
-        print(f"Number of positive values: {len(positive_data)} out of {data_np.size} ({len(positive_data)/data_np.size*100:.2f}%)")
+        positive_data = non_nan_data[non_nan_data > 0]
+        print(f"Positive values: {len(positive_data)} out of {data_np.size} ({len(positive_data)/data_np.size*100:.2f}%)")
 
         if len(positive_data) > 0:
             # Calculate percentiles of the positive data
+            p50 = np.percentile(positive_data, 50)
             p95 = np.percentile(positive_data, 95)
             p99 = np.percentile(positive_data, 99)
-            median = np.median(positive_data)
-            print(f"Data percentiles: 50%={median:.5e}, 95%={p95:.5e}, 99%={p99:.5e}")
+            p999 = np.percentile(positive_data, 99.9)
+            print(f"Positive data percentiles: 50%={p50:.5e}, 95%={p95:.5e}, 99%={p99:.5e}, 99.9%={p999:.5e}")
 
             # Sample some positive values
-            sample_size = min(5, len(positive_data))
-            print(f"Sample positive values: {positive_data[:sample_size]}")
+            sample_size = min(10, len(positive_data))
+            sample_indices = np.linspace(0, len(positive_data)-1, sample_size, dtype=int)
+            print(f"Sample positive values: {positive_data[sample_indices]}")
         else:
-            p95 = p99 = 1.0
+            p50 = p95 = p99 = p999 = 0.0
             print("No positive data found")
+
     except Exception as e:
         print(f"Error analyzing data: {e}")
-        p95 = decade_data.max().item() if hasattr(decade_data, 'max') else 1.0
-        positive_data = []
+        return
 
     # Calculate global total based on units
     global_total = None
     try:
-        if "m-2" in units.lower() or "m^-2" in units.lower() or "/m2" in units.lower():
-            # Area-weighted for per-area units
-            grid_cell_area = calculate_grid_area(
+        if hasattr(decade_data, 'sum'):
+            if any(unit in units.lower() for unit in ["m-2", "m^-2", "/m2"]):
+                # Area-weighted for per-area units
+                grid_cell_area = calculate_grid_area(
                     grid_area_shape=decade_data.shape,
                     units="m^2"
-                    )
-            weighted_total = (decade_data * grid_cell_area).sum()
-            # Extract base unit by removing area component
-            base_unit = units.replace("m-2", "").replace("m^-2","").replace("/m2","").strip()
-            if not base_unit:
-                base_unit = "units"
-            global_total = f"{weighted_total.item():.3e} {base_unit}"
-        else:
-            # Default case for other units
-            global_total = f"{decade_data.sum().item():.3e} {units}"
-        
+                )
+                weighted_total = (decade_data * grid_cell_area).sum()
+                # Extract base unit by removing area component
+                base_unit = units.replace("m-2", "").replace("m^-2", "").replace("/m2", "").strip()
+                if not base_unit:
+                    base_unit = "units"
+                global_total = f"{weighted_total.item():.3e} {base_unit}"
+            else:
+                # Default case for other units
+                total_sum = decade_data.sum()
+                if hasattr(total_sum, 'item'):
+                    global_total = f"{total_sum.item():.3e} {units}"
+                else:
+                    global_total = f"{float(total_sum):.3e} {units}"
+
         print(f"Global total: {global_total}")
     except Exception as e:
         print(f"Error calculating global total: {e}")
         global_total = "N/A"
 
-    # Set a more reasonable colorbar max for better visualization
+    # Set colorbar max based on data characteristics
     if cbarmax is None:
         if len(positive_data) > 0:
-            # Use 99th percentile for better visualization
-            cbarmax = p99
-            print(f"Auto-setting cbarmax to 99th percentile: {cbarmax}")
+            # For GFED data, which often has very skewed distributions
+            if "GFED" in subplot_title.upper() or "BA" in subplot_title.upper():
+                # Use 99th percentile for burned area data to avoid outliers
+                cbarmax = p99 if p99 > 0 else p95
+                print(f"Using 99th percentile for GFED/BA data: {cbarmax:.5e}")
+            else:
+                # For other data, use 95th percentile
+                cbarmax = p95 if p95 > 0 else p50
+                print(f"Using 95th percentile for other data: {cbarmax:.5e}")
+
+            # Ensure minimum threshold
+            if cbarmax <= 0:
+                cbarmax = data_np.max() if data_np.max() > 0 else 1.0
         else:
             cbarmax = 1.0
             print("No positive data, setting default cbarmax=1.0")
@@ -1124,8 +1186,12 @@ def map_plot(
 
     # Ensure a reasonable cbarmax value
     if cbarmax <= 0:
-        cbarmax = p99 if len(positive_data) > 0 else 1.0
+        cbarmax = 1.0
         print(f"Corrected non-positive cbarmax to: {cbarmax}")
+
+    # For very small values, consider different scaling
+    if cbarmax < 1e-10:
+        print(f"Very small cbarmax ({cbarmax:.2e}), consider checking data units or scaling")
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
 
@@ -1147,7 +1213,6 @@ def map_plot(
         glob=global_total,
         logMap=logMap,
     )
-
 
 def time_series_plot(
     axis,
@@ -1263,7 +1328,7 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale='none'
             )
         case "BA_GFED5":
             total_value, longitude, latitude = read_gfed5(
-                files=file_paths, upscaled=False, variable_name=variables
+                files=file_paths, upscaled=False, variables=variables
             )
         case "BA_GFED5_upscale":
             total_value, longitude, latitude = read_gfed5(
