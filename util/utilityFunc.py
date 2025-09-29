@@ -975,6 +975,32 @@ def define_subplot(
     mask_percentage = np.ma.count_masked(masked_data) / masked_data.size * 100
     print(f"Masked values: {np.ma.count_masked(masked_data)} of {masked_data.size} ({mask_percentage:.2f}%)")
 
+        # === NEW DEBUGGING SECTION ===
+    print(f"=== PLOTTING DEBUG for {title} ===")
+    print(f"lons shape: {lons.shape if hasattr(lons, 'shape') else type(lons)}")
+    print(f"lats shape: {lats.shape if hasattr(lats, 'shape') else type(lats)}")
+    print(f"masked_data shape: {masked_data.shape}")
+    print(f"masked_data type: {type(masked_data)}")
+    
+    # Check coordinate ranges
+    if hasattr(lons, 'values'):
+        lon_vals = lons.values
+        lat_vals = lats.values
+    else:
+        lon_vals = lons
+        lat_vals = lats
+        
+    print(f"Longitude range: {np.min(lon_vals):.2f} to {np.max(lon_vals):.2f}")
+    print(f"Latitude range: {np.min(lat_vals):.2f} to {np.max(lat_vals):.2f}")
+    
+    # Check some actual data values
+    unmasked_data = masked_data[~masked_data.mask] if hasattr(masked_data, 'mask') else masked_data[masked_data > 0]
+    if len(unmasked_data) > 0:
+        print(f"Sample unmasked values: {unmasked_data.flat[:5]}")
+        print(f"Unmasked range: {np.min(unmasked_data):.2e} to {np.max(unmasked_data):.2e}")
+    else:
+        print("No unmasked data found!")
+
     # Set up the map
     ax.coastlines(color="black")
     ax.add_feature(cfeature.LAND, edgecolor="gray", alpha=0.5)
@@ -1007,44 +1033,99 @@ def define_subplot(
         # For non-difference plots, either use log scale or linear scale
         # Get the standard jet colormap
         cmap = plt.cm.jet.copy()
-        # Set masked values (zeros and negatives) to white
-        cmap.set_bad('white')
+        # For Cartopy, bad values must be fully transparent
+        cmap.set_bad(alpha=0.0)
 
         # Check if data has any positive values for log scale
         log_compatible = np.ma.count(masked_data) > 0 and np.ma.min(masked_data) > 0
         
-        if logMap and log_compatible:
-            # For log plots, ensure vmin is positive
-            try:
-                vmin = max(np.ma.min(masked_data) * 0.1, 1e-12)  # Even smaller minimum
+        if logMap and log_compatible: 
+            # For log plots, ensure vmin is positive 
+            try: 
+                # For GFED data, use a more reasonable vmin to avoid extreme compression 
+                if "GFED" in title.upper() or "BA" in title.upper(): 
+                    # Use a vmin that's not too far from the bulk of the data 
+                    positive_vals = masked_data[masked_data > 0] 
+                    if len(positive_vals) > 0: 
+                        p1 = np.percentile(positive_vals, 1)  # 1st percentile 
+                        p10 = np.percentile(positive_vals, 10)  # 10th percentile 
+                        # Use 1st percentile, but not smaller than 1e-6 * vmax 
+                        vmin = max(p1, masx * 1e-6) 
+                        print(f"GFED log scale: using 1st percentile vmin: {vmin:.2e} (p1={p1:.2e})") 
+                    else: 
+                        vmin = masx * 1e-6 
+                else: 
+                    # For other data, use the original approach but with limits 
+                    vmin = max(np.ma.min(masked_data) * 0.1, masx * 1e-8)
+
                 print(f"Log scale vmin: {vmin:.2e}, vmax: {masx:.2e}")
-                
+
                 if vmin >= masx:
                     vmin = masx * 0.01
                     print(f"Adjusted vmin to {vmin:.2e} (1% of vmax)")
-                
+
                 logNorm = mcolors.LogNorm(vmin=vmin, vmax=masx)
-                p = ax.pcolormesh(
-                    lons,
-                    lats,
-                    masked_data,
-                    transform=ccrs.PlateCarree(),
-                    cmap=cmap,
-                    norm=logNorm,
-                )
+
+                                # === COORDINATE TEST FOR GFED ===
+                if "GFED" in title.upper():
+                    print("Testing with forced coordinates for GFED")
+                    # Create standard lat/lon arrays
+                    test_lons = np.linspace(-180, 180, masked_data.shape[1])
+                    test_lats = np.linspace(-90, 90, masked_data.shape[0])
+                    lons_mesh, lats_mesh = np.meshgrid(test_lons, test_lats)
+
+                    p = ax.pcolormesh(
+                        lons,
+                        lats,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        norm=logNorm,
+                    ) 
+                else:
+                    # Use original coordinates for ModelE
+                    p = ax.pcolormesh(
+                        lons,
+                        lats,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        norm=logNorm,
+                    )
+
             except (ValueError, RuntimeError) as e:
                 print(f"Warning: Log scale error - {e}. Switching to linear scale")
                 # For linear plots, use a very small vmin to show small values
                 vmin = np.ma.min(masked_data) if np.ma.count(masked_data) > 0 else 0
-                p = ax.pcolormesh(
-                    lons,
-                    lats,
-                    masked_data,
-                    transform=ccrs.PlateCarree(),
-                    cmap=cmap,
-                    vmin=vmin,
-                    vmax=masx,
-                )
+
+                                # === COORDINATE TEST FOR GFED (Linear fallback) ===
+                if "GFED" in title.upper():
+                    print("Testing with forced coordinates for GFED (linear fallback)")
+                    # Create standard lat/lon arrays
+                    test_lons = np.linspace(-180, 180, masked_data.shape[1])
+                    test_lats = np.linspace(-90, 90, masked_data.shape[0])
+                    lons_mesh, lats_mesh = np.meshgrid(test_lons, test_lats)
+
+                    p = ax.pcolormesh(
+                        lons_mesh,
+                        lats_mesh,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        vmin=vmin,
+                        vmax=masx,
+                    )
+                else:
+                    # Use original coordinates for ModelE
+                    p = ax.pcolormesh(
+                        lons,
+                        lats,
+                        masked_data,
+                        transform=ccrs.PlateCarree(),
+                        cmap=cmap,
+                        vmin=vmin,
+                        vmax=masx,
+                    )
         else:
             # Linear scale - use very small vmin for burned area data
             if "BA" in title.upper() or "BURN" in title.upper():
@@ -1058,16 +1139,38 @@ def define_subplot(
                 vmin = 0.0
                 
             print(f"Linear scale vmin: {vmin:.2e}, vmax: {masx:.2e}")
-            p = ax.pcolormesh(
-                lons,
-                lats,
-                masked_data,
-                transform=ccrs.PlateCarree(),
-                cmap=cmap,
-                vmin=vmin,
-                vmax=masx,
-            )
 
+                        # === COORDINATE TEST FOR GFED (Linear scale) ===
+            if "GFED" in title.upper():
+                print("Testing with forced coordinates for GFED (linear)")
+                # Create standard lat/lon arrays
+                test_lons = np.linspace(-180, 180, masked_data.shape[1])
+                test_lats = np.linspace(-90, 90, masked_data.shape[0])
+                lons_mesh, lats_mesh = np.meshgrid(test_lons, test_lats)
+                
+                p = ax.pcolormesh(
+                    lons_mesh,
+                    lats_mesh,
+                    masked_data,
+                    transform=ccrs.PlateCarree(),
+                    cmap=cmap,
+                    vmin=vmin,
+                    vmax=masx,
+                )
+            else:
+                # Use original coordinates for ModelE
+                p = ax.pcolormesh(
+                    lons,
+                    lats,
+                    masked_data,
+                    transform=ccrs.PlateCarree(),
+                    cmap=cmap,
+                    vmin=vmin,
+                    vmax=masx,
+                )
+
+    print(f"Final plotting values - vmin: {vmin if 'vmin' in locals() else 'N/A':.2e}, vmax: {masx:.2e}")
+    print(f"=== END PLOTTING DEBUG ===")
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
     return ax
@@ -1113,19 +1216,41 @@ def map_plot(
         positive_data = non_nan_data[non_nan_data > 0]
         print(f"Positive values: {len(positive_data)} out of {data_np.size} ({len(positive_data)/data_np.size*100:.2f}%)")
 
-        if len(positive_data) > 0:
-            # Calculate percentiles of the positive data
-            p50 = np.percentile(positive_data, 50)
-            p95 = np.percentile(positive_data, 95)
-            p99 = np.percentile(positive_data, 99)
-            p999 = np.percentile(positive_data, 99.9)
-            print(f"Positive data percentiles: 50%={p50:.5e}, 95%={p95:.5e}, 99%={p99:.5e}, 99.9%={p999:.5e}")
+        if len(positive_data) > 0: 
+            # Calculate percentiles of the positive data 
+            p50 = np.percentile(positive_data, 50) 
+            p95 = np.percentile(positive_data, 95) 
+            p99 = np.percentile(positive_data, 99) 
+            p999 = np.percentile(positive_data, 99.9) 
+            data_min = np.min(positive_data) 
+            data_max = np.max(positive_data) 
 
-            # Sample some positive values
-            sample_size = min(10, len(positive_data))
-            sample_indices = np.linspace(0, len(positive_data)-1, sample_size, dtype=int)
-            print(f"Sample positive values: {positive_data[sample_indices]}")
-        else:
+            print(f"Positive data percentiles: 50%={p50:.5e}, 95%={p95:.5e}, 99%={p99:.5e}, 99.9%={p999:.5e}") 
+            print(f"Positive data range: min={data_min:.5e}, max={data_max:.5e}") 
+            print(f"Dynamic range: {data_max/data_min:.2e} orders of magnitude") 
+
+            # Check for extreme outliers 
+            if data_max / p99 > 100: 
+                print(f"WARNING: Extreme outliers detected! Max is {data_max/p99:.1f}x larger than 99th percentile") 
+                # Find and report outlier locations 
+                outlier_threshold = p999 
+                outliers = data_np > outlier_threshold 
+                if np.any(outliers): 
+                    outlier_count = np.sum(outliers) 
+                    print(f"Found {outlier_count} extreme outlier(s) above {outlier_threshold:.5e}") 
+                    # Get indices of outliers 
+                    outlier_indices = np.where(outliers) 
+                    if len(outlier_indices[0]) <= 5:  # Report up to 5 outlier locations 
+                        for i in range(min(5, len(outlier_indices[0]))): 
+                            lat_idx, lon_idx = outlier_indices[0][i], outlier_indices[1][i] 
+                            outlier_value = data_np[lat_idx, lon_idx] 
+                            print(f"  Outlier at grid [{lat_idx}, {lon_idx}]: {outlier_value:.5e}") 
+
+            # Sample some positive values 
+            sample_size = min(10, len(positive_data)) 
+            sample_indices = np.linspace(0, len(positive_data)-1, sample_size, dtype=int) 
+            print(f"Sample positive values: {positive_data[sample_indices]}") 
+        else: 
             p50 = p95 = p99 = p999 = 0.0
             print("No positive data found")
 
@@ -1167,9 +1292,17 @@ def map_plot(
         if len(positive_data) > 0:
             # For GFED data, which often has very skewed distributions
             if "GFED" in subplot_title.upper() or "BA" in subplot_title.upper():
-                # Use 99th percentile for burned area data to avoid outliers
-                cbarmax = p99 if p99 > 0 else p95
-                print(f"Using 99th percentile for GFED/BA data: {cbarmax:.5e}")
+               # Check for extreme outliers
+               data_max = np.max(positive_data) 
+               ratio_99_to_max = p99 / data_max if data_max > 0 else 1 
+               print(f"Data max: {data_max:.5e}, 99th percentile: {p99:.5e}, ratio: {ratio_99_to_max:.5e}")
+
+               if ratio_99_to_max < 1e-3:  # If 99th percentile is much smaller than max
+                   print("Extreme outlier detected! Using 99.9th percentile to avoid outlier distortion")
+                   cbarmax = p999 if p999 > 0 else p99
+               else: 
+                   cbarmax = p99 if p99 > 0 else p95 
+                   print(f"Using percentile-based scaling for GFED/BA data: {cbarmax:.5e}")
             else:
                 # For other data, use 95th percentile
                 cbarmax = p95 if p95 > 0 else p50
@@ -1194,6 +1327,13 @@ def map_plot(
         print(f"Very small cbarmax ({cbarmax:.2e}), consider checking data units or scaling")
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
+
+    # Simple test - print exactly what's being passed to define_subplot
+    print(f"Calling define_subplot with:")
+    print(f"  masx (cbarmax): {cbarmax}")
+    print(f"  logMap: {logMap}")
+    print(f"  is_diff: {is_diff}")
+    print(f"  Data min/max being plotted: {np.nanmin(decade_data.values):.2e} / {np.nanmax(decade_data.values):.2e}")
 
     define_subplot(
         figure,
@@ -1367,9 +1507,6 @@ def obtain_time_series_xarray(
 ):
     """
     Calculates the mean and the interannual variability
-    Returns:
-        tuple: (time_mean_data, data_per_year_stack, longitude, latitude, units, start_year, end_year)
-        or (None, None, None, None, None, None, None) if error occurs
     """
 
     try:
@@ -1392,12 +1529,47 @@ def obtain_time_series_xarray(
         sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
 
         # Debug prints
+        # Debug prints
         print(f"Time dimension: {time_dimension}")
         print(f"Time values: {total_value.coords['time'].values}")
+        print(f"Raw data shape: {total_value.shape}")
+        print(f"Raw data range: min={total_value.min().item():.5e}, max={total_value.max().item():.5e}")
+
+        # **ADD THIS DEBUGGING BLOCK HERE**
+        # Check for problematic values in raw data
+        raw_data = total_value.values
+        print(f"Raw data statistics:")
+        print(f"  - Non-zero values: {np.count_nonzero(raw_data)} out of {raw_data.size}")
+        print(f"  - Positive values: {np.sum(raw_data > 0)} out of {raw_data.size}")
+        print(f"  - NaN values: {np.sum(np.isnan(raw_data))}")
+        print(f"  - Infinite values: {np.sum(np.isinf(raw_data))}")
+        
+        # Check each time slice
+        for t in range(min(3, total_value.shape[0])):  # Check first 3 time slices
+            time_slice = total_value.isel(time=t).values
+            print(f"  - Time slice {t}: min={np.nanmin(time_slice):.5e}, max={np.nanmax(time_slice):.5e}, positive_count={np.sum(time_slice > 0)}")
 
         time_mean_data = total_value.mean(dim="time")
         print(f"Shape of time_mean_data: {time_mean_data.shape}")
 
+        print(f"Time mean data statistics:")
+        mean_data = time_mean_data.values
+        print(f"  - Range: min={np.nanmin(mean_data):.5e}, max={np.nanmax(mean_data):.5e}")
+        print(f"  - Non-zero values: {np.count_nonzero(mean_data)} out of {mean_data.size}")
+        print(f"  - Positive values: {np.sum(mean_data > 0)} out of {mean_data.size}")
+        
+        # Check for extreme values
+        if np.nanmax(mean_data) / np.nanmin(mean_data[mean_data > 0]) > 1e10:
+            print(f"WARNING: Extreme dynamic range detected in time_mean_data!")
+            # Find the extreme values
+            flat_data = mean_data.flatten()
+            flat_data = flat_data[~np.isnan(flat_data)]
+            if len(flat_data) > 0:
+                sorted_data = np.sort(flat_data)
+                print(f"  - Smallest positive: {sorted_data[sorted_data > 0][0]:.5e}")
+                print(f"  - Largest value: {sorted_data[-1]:.5e}")
+                print(f"  - 99th percentile: {np.percentile(sorted_data[sorted_data > 0], 99):.5e}")
+        
         units = total_value.attrs["units"]
         print(f"Units: {units}")
 
@@ -1525,6 +1697,10 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     os.makedirs(output_dir, exist_ok=True)
     print(f"Ensuring output directory exists: {output_dir}")
 
+    # Get logmapscale setting from configuration (default to True if not specified)
+    logmapscale = time_analysis_figure_data.get('logmapscale', True)
+    print(f"Using logmapscale setting: {logmapscale}")
+
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
         map_figure, map_axis = plt.subplots(
@@ -1563,6 +1739,35 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
         # Plot the period mean variable 
+        print(f"\n=== DEBUGGING MAP DATA for {file_type} ===")
+        print(f"time_mean_data type: {type(time_mean_data)}")
+        if time_mean_data is not None:
+            if hasattr(time_mean_data, 'values'):
+                map_data = time_mean_data.values
+                print(f"Map data shape: {map_data.shape}")
+                print(f"Map data range: min={np.nanmin(map_data):.5e}, max={np.nanmax(map_data):.5e}")
+                print(f"Map data positive values: {np.sum(map_data > 0)} out of {map_data.size}")
+        
+                # Check for the problematic outlier
+                max_val = np.nanmax(map_data)
+                max_indices = np.unravel_index(np.nanargmax(map_data), map_data.shape)
+                print(f"Maximum value {max_val:.5e} at indices {max_indices}")
+        
+                # Check percentiles
+                positive_data = map_data[map_data > 0]
+                if len(positive_data) > 0:
+                    p99 = np.percentile(positive_data, 99)
+                    p999 = np.percentile(positive_data, 99.9)
+                    print(f"99th percentile: {p99:.5e}")
+                    print(f"99.9th percentile: {p999:.5e}")
+                    print(f"Max/99th ratio: {max_val/p99:.2e}")
+            else:
+                print("time_mean_data has no .values attribute")
+        else:
+            print("time_mean_data is None!")
+
+        print(f"=== END DEBUGGING MAP DATA ===\n")
+        
         map_plot(
             figure=map_figure,
             axis=map_axis,
@@ -1574,7 +1779,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             subplot_title=figure_label,
             units=units,
             cbarmax=figure_data["cbarmax"],
-            logMap=True,
+            logMap=logmapscale,
         )
 
         # Plot the time series 
