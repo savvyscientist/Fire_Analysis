@@ -12,7 +12,6 @@ def utilityRunner():
             script_env_data = env_json[script]
             
             # Check if annual is specified 
-
             annual = script_env_data.get("annual", None)
             
             # If not found at root, look in time_analysis_figure_data
@@ -21,13 +20,19 @@ def utilityRunner():
             else:
                 # Default to False (monthly data) if not found anywhere
                 annual = False
+
+            # Get save_netcdf flag (default to False if not specified)
+            save_netcdf = script_env_data.get("save_netcdf", False)
                 
-            print(f"Annual aggregation setting: {annual}")
+            print(f"Annual aggregation setting: {annual}") 
+            print(f"Save NetCDF setting: {save_netcdf}")
+
             
             run_time_series_analysis(
                 folder_data_list=script_env_data["folders"],
                 time_analysis_figure_data=script_env_data["time_analysis_figure_data"],
-                annual=annual  # Explicitly pass the annual parameter
+                annual=annual,  # Explicitly pass the annual parameter
+                save_netcdf=save_netcdf  # Add this parameter
             )
 
         else:

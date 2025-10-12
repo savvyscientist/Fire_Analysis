@@ -1503,7 +1503,9 @@ def obtain_time_series_xarray(
     variables,
     NetCDF_folder_Path,
     NetCDF_Type,
-    annual=True
+    annual=True,
+    save_netcdf=False,
+    output_dir=None
 ):
     """
     Calculates the mean and the interannual variability
@@ -1656,6 +1658,28 @@ def obtain_time_series_xarray(
         data_per_year_stack = np.column_stack((time_values, total_data_array))
         print(f"Final stacked shape: {data_per_year_stack.shape}")
 
+        if save_netcdf: 
+            # Use the provided output_dir or fall back to parent directory of input 
+            if output_dir: 
+                save_path = output_dir 
+            else: 
+                save_path = os.path.dirname(NetCDF_folder_Path)
+
+            # Create output filename 
+            time_type = "annual" if annual else "monthly" 
+            vars_str = "_".join(variables) if variables else "data" 
+            output_file = f"{NetCDF_Type}_{vars_str}_{time_type}_{int(start_year)}-{int(end_year)}_timeseries.nc" 
+            output_path = os.path.join(save_path, output_file) 
+
+            # Create and save dataset 
+            ds = xr.Dataset({ 
+                             'total_data': (['time'], data_per_year_stack[:, 1], {'units': units}) 
+                             }, coords={ 
+                                        'time': (['time'], data_per_year_stack[:, 0], {'units': 'years'}) 
+                                        }) 
+            ds.to_netcdf(output_path) 
+            print(f"Time series saved to: {output_path}")
+
         return (
             time_mean_data,
             data_per_year_stack,
@@ -1671,8 +1695,101 @@ def obtain_time_series_xarray(
         print(f"Error details: {traceback.format_exc()}")
         return None, None, None, None, None, None, None
 
+def save_combined_netcdf(all_datasets, output_dir, annual, global_year_min, global_year_max):
+    """
+    Save all datasets in a single NetCDF file.
+    
+    Parameters:
+    -----------
+    all_datasets : dict
+        Dictionary with dataset information
+    output_dir : str
+        Directory to save the NetCDF file
+    annual : bool
+        Whether data is annual or monthly
+    global_year_min : int
+        Minimum year across all datasets
+    global_year_max : int
+        Maximum year across all datasets
+    """
+    try:
+        # Create filename
+        time_type = "annual" if annual else "monthly"
+        output_file = f"combined_timeseries_{time_type}_{global_year_min}-{global_year_max}.nc"
+        output_path = os.path.join(output_dir, output_file)
+        
+        # Find the most complete time axis (dataset with most time points)
+        max_time_points = 0
+        reference_time = None
+        for dataset_key, dataset_info in all_datasets.items():
+            if len(dataset_info['time']) > max_time_points:
+                max_time_points = len(dataset_info['time'])
+                reference_time = dataset_info['time']
+        
+        # Create xarray Dataset
+        data_vars = {}
+        coords = {'time': (['time'], reference_time, {
+            'units': 'years' if annual else 'decimal_years',
+            'long_name': 'Time coordinate',
+            'description': f'Time coordinate for {"annual" if annual else "monthly"} data'
+        })}
+        
+        # Add each dataset as a variable
+        for dataset_key, dataset_info in all_datasets.items():
+            # Handle case where datasets might have different time lengths
+            if len(dataset_info['time']) == len(reference_time):
+                # Same length, use directly
+                data_values = dataset_info['data']
+                time_values = dataset_info['time']
+            else:
+                # Different lengths, interpolate or pad
+                print(f"Warning: Dataset {dataset_key} has different time length. Interpolating...")
+                data_values = np.interp(reference_time, dataset_info['time'], dataset_info['data'])
+                time_values = reference_time
+            
+            # Create variable name (clean it for NetCDF compatibility)
+            var_name = dataset_key.lower().replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
+            
+            data_vars[var_name] = (['time'], data_values, {
+                'units': dataset_info['units'],
+                'long_name': f'Total data for {dataset_key}',
+                'file_type': dataset_info['file_type'],
+                'source_variables': ', '.join(dataset_info['variables']) if dataset_info['variables'] else 'unknown',
+                'source_folder': dataset_info['folder_path'],
+                'time_period': f"{dataset_info['start_year']}-{dataset_info['end_year']}"
+            })
+        
+        # Create the dataset
+        ds = xr.Dataset(data_vars, coords=coords)
+        
+        # Add global attributes
+        ds.attrs.update({
+            'title': 'Combined time series data from multiple sources',
+            'description': 'Spatially integrated total data from various datasets',
+            'creation_date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'source': 'Generated by time series analysis script',
+            'time_type': time_type,
+            'time_range': f"{global_year_min}-{global_year_max}",
+            'number_of_datasets': len(all_datasets)
+        })
+        
+        # Save to NetCDF
+        ds.to_netcdf(output_path)
+        print(f"\n=== Combined NetCDF saved ===")
+        print(f"File: {output_path}")
+        print(f"Datasets included: {list(all_datasets.keys())}")
+        print(f"Time points: {len(reference_time)}")
+        print(f"Variables saved: {list(data_vars.keys())}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error saving combined NetCDF file: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
-def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=False):
+def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=False, save_netcdf=False):
     """
     Run time series analysis for multiple datasets
     Parameters
@@ -1701,6 +1818,9 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     logmapscale = time_analysis_figure_data.get('logmapscale', True)
     print(f"Using logmapscale setting: {logmapscale}")
 
+    # Initialize dictionary to store all datasets for combined NetCDF
+    all_datasets = {}
+
     # Example usage with test parameters
     for index, folder_data in enumerate(folder_data_list):
         map_figure, map_axis = plt.subplots(
@@ -1721,6 +1841,9 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
         print(f"Variables: {variables}")
         print(f"Folder path: {folder_path}")
         print(f"Annual aggregation: {annual}")
+       
+        # Extract the plots folder path 
+        plots_folder = time_analysis_figure_data.get('figs_folder', '.')
 
         (
             time_mean_data,
@@ -1734,10 +1857,26 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             NetCDF_folder_Path=folder_path,
             NetCDF_Type=file_type,
             variables=variables,
-            annual=annual
+            annual=annual,
+            save_netcdf=save_netcdf
         )
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})"
+
+        # Store dataset info for combined NetCDF
+        if save_netcdf:
+            dataset_key = f"{figure_data['label'].replace(' ', '_')}"  # Clean label for variable name
+            all_datasets[dataset_key] = {
+                'time': data_per_year_stack[:, 0],
+                'data': data_per_year_stack[:, 1],
+                'units': units,
+                'file_type': file_type,
+                'variables': variables,
+                'start_year': start_year,
+                'end_year': end_year,
+                'folder_path': folder_path
+            }
+
         # Plot the period mean variable 
         print(f"\n=== DEBUGGING MAP DATA for {file_type} ===")
         print(f"time_mean_data type: {type(time_mean_data)}")
@@ -1805,6 +1944,10 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
 
         print(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
         map_figure.savefig(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
+
+    # Save combined NetCDF file with all datasets
+    if save_netcdf and all_datasets:
+        save_combined_netcdf(all_datasets, output_dir, annual, global_year_min, global_year_max)
 
     # Create difference maps if more than one dataset is provided
     if len(folder_data_list) > 1:
