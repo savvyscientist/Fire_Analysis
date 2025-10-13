@@ -422,14 +422,16 @@ def read_gfed5(files, variables=None, upscaled=False):
 
     return total_data_array, longitudes, latitudes
 
-def read_gfed4s_emis(files, variables, upscaled=False, monthly=False):
+def read_modelEinput_emis(files, variables, upscaled=False, monthly=False):
     """
-    Read GFED4s emissions data from multiple netCDF files using xarray. 
+    Read modelE input emissions, whether that is GFED4s or FINN data
+    processed to be used as modelE input, ans thus has the same format.
+    Reading is done from multiple netCDF files using xarray. 
     **the below function is currently written for multiple files but 
     actually uses only one as it does one year monthly calcualtions**
     Parameters
     ---------- 
-    files : list List of paths to GFED4s emissions netCDF files 
+    files : list List of paths to emissions netCDF files 
     monthly (bool): If True, process as monthly data; otherwise, as annual
     Returns 
     ------- 
@@ -1491,7 +1493,11 @@ def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale='none'
                 files=file_paths, upscaled=True
             )
         case "GFED4s_Monthly":
-            total_value, longitude, latitude = read_gfed4s_emis(
+            total_value, longitude, latitude = read_modelEinput_emis(
+                files=file_paths, variables=variables, upscaled=True, monthly=True
+            )
+        case "FINN2.5_Monthly":
+            total_value, longitude, latitude = read_modelEinput_emis(
                 files=file_paths, variables=variables, upscaled=True, monthly=True
             )
         case _:
