@@ -1441,7 +1441,7 @@ def time_series_plot(
             axis.set_xticklabels(tick_labels, rotation=45 if len(years) < 5 else 0)
         
         # Add more space at the bottom for rotated labels
-        plt.subplots_adjust(bottom=0.15)
+        #plt.subplots_adjust(bottom=0.15, right=0.85)
     else:
         # For annual data, use integer ticks
         if len(time_values) <= 10:
@@ -1450,11 +1450,16 @@ def time_series_plot(
             axis.set_xticklabels([str(int(year)) for year in time_values])
         else:
             # For many years, let matplotlib handle the ticks
-            axis.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+            axis.xaxis.set_major_locator(plt.MaxNLocator(integer=True)) 
+
+        # Add space on the right for legend (annual data case)
+        #plt.subplots_adjust(right=0.85)
     
     # Add legend and grid
-    axis.legend()
+    axis.legend(bbox_to_anchor=(1.05, 1), loc='upper right')
     axis.grid(grid_visible)
+    # Use tight_layout to automatically adjust spacing
+    #plt.tight_layout()
     
     return axis
 
@@ -1810,7 +1815,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
        Default is False 
     """
     # Plot side by side maps for GFED and ModelE
-    _, time_analysis_axis = plt.subplots(figsize=(10, 6))
+    _, time_analysis_axis = plt.subplots(figsize=(12, 6))
 
     global_year_max = 0
     global_year_min = 9999
@@ -2044,11 +2049,17 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     time_analysis_axis.set_xlabel(xlabel)
     time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
     
-    # Add more space at the bottom for rotated month labels
-    if not annual:
-        plt.subplots_adjust(bottom=0.18, right=0.85)  # Make room for legend too
+    # Position legend outside plot area 
+    time_analysis_axis.legend(bbox_to_anchor=(1.05, 1), loc='upper right') 
 
-    _.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure")
+    # After all plotting is complete, before saving: 
+    plt.tight_layout() 
+    plt.subplots_adjust(right=0.75)  # Adjust this value as needed 
+
+    # Save with bbox_inches='tight' for best results 
+    plt.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure", 
+                bbox_inches='tight', dpi=300)
+
     plt.show()
 
 
