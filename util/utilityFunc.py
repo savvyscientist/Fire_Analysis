@@ -73,24 +73,29 @@ def extract_scaling_factor(units):
         return 1.0, units  # Default scaling factor is 1 if not specified
 
 # Function to convert units
-def handle_units(data_array, units, monthly=False, file_path=None, year=None):
+def handle_units(data_array, units, monthly=False, file_path=None, year=None, variable_names=None):
     """
     Apply appropriate scaling based on variable units.
    
     Parameters:
         data_array: xarray DataArray
-        units: str, unit string from ModelE
-        monthly: bool, whether the data is monthly or annual
-        file_path: str, path to the file (needed for monthly data to extract month)
-        year: int, the year (needed for monthly data to calculate days)
+        units: str, original units from the file 
+        monthly: bool, optional, whether the data is monthly 
+        file_path: str, optional, file path for monthly data
+        year: int, optional, year for monthly data
+        variable_names: list, optional, list of variable names being processed
 
     Returns:
-        scaled_data: scaled DataArray
-        new_units: str, updated units after scaling
+    tuple: (converted_units, new units)
     """
+
     grid_cell_area = None
     scaling_factor = 1.0
     new_units = units
+
+
+    #Extract scaling factor from units (existing code)
+    scaling_factor, clean_units = extract_scaling_factor(units)
 
     # Dictionary of unit handlers
     unit_handlers = {
@@ -109,8 +114,6 @@ def handle_units(data_array, units, monthly=False, file_path=None, year=None):
         'm-2 s-1': {
             'scaling': 1.,  
             'new_units': 'm-2 s-1'
-            #'scaling': KM_SQUARED_TO_M_SQUARED,  
-            #'new_units': 'km-2 yr-1'
         },
         '/m2': {
             'scaling': 1E6 * 1E-10,  # For flash counts
@@ -123,11 +126,11 @@ def handle_units(data_array, units, monthly=False, file_path=None, year=None):
     }
 
     # Check exact match first
-    if units in unit_handlers:
-        handler = unit_handlers[units]
+    if clean_units in unit_handlers:
+        handler = unit_handlers[clean_units]
     else:
         # Generic handling based on unit patterns
-        if any(pattern in units for pattern in ['kg', 'm-2', 's-1']):
+        if any(pattern in clean_units for pattern in ['kg', 'm-2', 's-1']):
             # Mass flux handling
             handler = {
                 'needs_area': True,
@@ -137,27 +140,28 @@ def handle_units(data_array, units, monthly=False, file_path=None, year=None):
             # Default handling
             handler = {
                 'scaling': 1.0,
-                'new_units': units
+                'new_units': clean_units
             }
+
+    #Apply scaling factor
+    scaled_data = data_array * scaling_factor
 
     if handler.get('needs_area', False):
         if grid_cell_area is None:
             # Get spatial dimensions only (-2 and -1)
-            spatial_shape = data_array.shape[-2:]
+            spatial_shape = scaled_data.shape[-2:]
             grid_cell_area = calculate_grid_area(
                 grid_area_shape=spatial_shape,
                 units='m^2'
             )
-            # Expand dimensions if needed for broadcasting
-            if len(data_array.shape) > 2:
-                # Add any leading dimensions (e.g., time)
-                for _ in range(len(data_array.shape) - 2):
-                    grid_cell_area = grid_cell_area[np.newaxis, ...]
-        data_array = data_array * grid_cell_area
-
-    if handler.get('scaling'):
-        data_array = data_array * handler['scaling']
-    new_units = handler['new_units']
+        # Integrate over area
+        scaled_data = scaled_data * grid_cell_area
+        new_units = handler['new_units']
+    else:
+        # Apply direct scaling
+        if 'scaling' in handler:
+            scaled_data = scaled_data * handler['scaling']
+        new_units = handler['new_units']
 
     # Apply time scaling
     if 's-1' in units or '/s' in units:
@@ -170,16 +174,14 @@ def handle_units(data_array, units, monthly=False, file_path=None, year=None):
             days_in_month = days_to_months(str(month_num).zfill(2), year)
             seconds_in_month = days_in_month * DAYS_TO_SECONDS
             # Apply monthly scaling
-            data_array = data_array * seconds_in_month
+            scaled_data = scaled_data * seconds_in_month
             new_units = new_units.replace('/s', '/month').replace('s-1', 'month-1')
         else:
             # For annual data, multiply by seconds in year
-            data_array = data_array * SECONDS_IN_A_YEAR
+            scaled_data = scaled_data * SECONDS_IN_A_YEAR
             new_units = new_units.replace('/s', '/yr').replace('s-1', 'yr-1')
 
-    return data_array, new_units
-
-
+    return scaled_data, new_units
 
 # Global cache for grid areas
 _grid_area_cache = {}
@@ -415,11 +417,6 @@ def read_gfed5(files, variables=None, upscaled=False):
         attrs=attribute_dict,
     )
 
-    print(f"Successfully processed {len(monthly_data_list)} files")
-    print(f"Variables processed: {variables}")
-    print(f"Time range: {time_values.min():.3f} to {time_values.max():.3f}")
-    print(f"Data shape: {total_data_array.shape}")
-
     return total_data_array, longitudes, latitudes
 
 def read_modelEinput_emis(files, variables, upscaled=False, monthly=False):
@@ -488,7 +485,6 @@ def read_modelEinput_emis(files, variables, upscaled=False, monthly=False):
             #1. If per area units, multiply by grid cell area
             if grid_cell_area is not None:
                 month_data = month_data * grid_cell_area # Convert from flux per area to total flux
-            #print('grid_cell_area.sum',grid_cell_area.sum())
 
             #2. Convert from per second to per month by multiplying with second in month
             days_in_month = days_to_months(str(month+1).zfill(2), year)
@@ -570,7 +566,6 @@ def read_gfed4s(files, upscaled=False):
             else:
                 total_burned_area = annual_burned_fraction
             burned_fraction_list.append(total_burned_area)
-        # print(file_path.split("_"), file_path.split("_")[1].split(".")[0])
         # file paths and folders with underscores may effect this year extraction
         year = (
             file_path.split("_")[1].split(".")[0]
@@ -651,8 +646,6 @@ def read_ModelE(files, variables, monthly=False, scale='none'):
                
     # Sort files to ensure chronological order
     files.sort()
-    print(f"Processing {len(files)} ModelE files")
-    print(f"Reading variables: {variables}")
                
     # Initialize lists to store each year's dataset
     all_data = []
@@ -741,8 +734,6 @@ def read_ModelE(files, variables, monthly=False, scale='none'):
                     
                     # Create decimal year value (e.g., 2009.0 for Jan, 2009.083 for Feb)
                     decimal_year = year + month_num/12.0
-                    
-                    print(f"Extracted year: {year}, month: {month} ({month_num+1}), decimal: {decimal_year:.3f}")
                 except (ValueError, IndexError, AttributeError) as e:
                     # Fallback to just using the order in the file list if filename parsing fails
                     print(f"WARNING: Failed to extract month/year from filename: {e}. Using file order instead.")
@@ -761,7 +752,6 @@ def read_ModelE(files, variables, monthly=False, scale='none'):
                 time_values.append(year)
                  
             # Append data
-            print(f"Extracted year: {year}, month: {month} ({month_num+1}), decimal: {decimal_year:.3f}")
             all_data.append(modelE_var_data)
             
         except Exception as e:
@@ -797,30 +787,18 @@ def read_ModelE(files, variables, monthly=False, scale='none'):
         attrs=attribute_dict
     )
     
-    # Before handle_units
-    print(f"Before handle_units - Data shape: {modelE_all_year.shape}")
-    print(f"Before handle_units - Sample values: {modelE_all_year.values.flat[:5]}")
-    print(f"Before handle_units - Data sum: {modelE_all_year.sum().item()}")
-
-
     # Handle units conversion and time scaling
     modelE_all_year, new_units = handle_units(
         modelE_all_year, 
         attribute_dict.get('units',''), 
         monthly=monthly,
         file_path=files[0] if monthly else None,  # Pass file_path for monthly data
-        year=int(time_values[0]) if monthly else None    # Pass year for monthly data
+        year=int(time_values[0]) if monthly else None,    # Pass year for monthly data
+        variable_names=variables
     )        
-
-    # After handle_units
-    print(f"After handle_units - Data shape: {modelE_all_year.shape}")
-    print(f"After handle_units - Sample values: {modelE_all_year.values.flat[:5]}")
-    print(f"After handle_units - Data sum: {modelE_all_year.sum().item()}")
-    print(f"Units changed from '{attribute_dict.get('units', '')}' to '{new_units}'")
 
              
     modelE_all_year.attrs["units"] = new_units
-    print(f"ModelE data time values: {time_values}")
     
     return modelE_all_year, longitude, latitude
 
@@ -845,7 +823,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
             #     density_variable_data > 0.0, 0.0
             # )
             time_data_array = netcdf_dataset.variables["time"][:]
-            # print(netcdf_dataset.variables["time"])
 
             # Copy attributes of the burned area fraction
             for attr_name in density_variable.ncattrs():
@@ -878,7 +855,6 @@ def read_lightning_data(files, yearly=True, upscaled=False):
                     yearly_var_data[int(current_year)] = var_data_array
 
                 monthly_data.append(var_data_array)
-                # print(f"Current Month {month}: ", var_data_array.sum())
             yearly_var_data = dict(sorted(yearly_var_data.items()))
             attribute_dict["units"] = "lightning strokes km-2 d-1"
             latitudes = np.linspace(-90, 90, density_variable.shape[-2])
@@ -977,13 +953,6 @@ def define_subplot(
     mask_percentage = np.ma.count_masked(masked_data) / masked_data.size * 100
     print(f"Masked values: {np.ma.count_masked(masked_data)} of {masked_data.size} ({mask_percentage:.2f}%)")
 
-        # === NEW DEBUGGING SECTION ===
-    print(f"=== PLOTTING DEBUG for {title} ===")
-    print(f"lons shape: {lons.shape if hasattr(lons, 'shape') else type(lons)}")
-    print(f"lats shape: {lats.shape if hasattr(lats, 'shape') else type(lats)}")
-    print(f"masked_data shape: {masked_data.shape}")
-    print(f"masked_data type: {type(masked_data)}")
-    
     # Check coordinate ranges
     if hasattr(lons, 'values'):
         lon_vals = lons.values
@@ -992,9 +961,6 @@ def define_subplot(
         lon_vals = lons
         lat_vals = lats
         
-    print(f"Longitude range: {np.min(lon_vals):.2f} to {np.max(lon_vals):.2f}")
-    print(f"Latitude range: {np.min(lat_vals):.2f} to {np.max(lat_vals):.2f}")
-    
     # Check some actual data values
     unmasked_data = masked_data[~masked_data.mask] if hasattr(masked_data, 'mask') else masked_data[masked_data > 0]
     if len(unmasked_data) > 0:
@@ -1171,8 +1137,6 @@ def define_subplot(
                     vmax=masx,
                 )
 
-    print(f"Final plotting values - vmin: {vmin if 'vmin' in locals() else 'N/A':.2e}, vmax: {masx:.2e}")
-    print(f"=== END PLOTTING DEBUG ===")
     cbar = fig.colorbar(p, ax=ax, orientation=cborientation, fraction=fraction, pad=pad)
     cbar.set_label(f"{clabel}", labelpad=labelpad, fontsize=fontsize)
     return ax
@@ -1330,13 +1294,6 @@ def map_plot(
 
     axis_value = axis if axis_length <= 1 else axis[axis_index]
 
-    # Simple test - print exactly what's being passed to define_subplot
-    print(f"Calling define_subplot with:")
-    print(f"  masx (cbarmax): {cbarmax}")
-    print(f"  logMap: {logMap}")
-    print(f"  is_diff: {is_diff}")
-    print(f"  Data min/max being plotted: {np.nanmin(decade_data.values):.2e} / {np.nanmax(decade_data.values):.2e}")
-
     define_subplot(
         figure,
         axis_value,
@@ -1391,68 +1348,7 @@ def time_series_plot(
         label=label,
     )
 
-    # Check if we have monthly data by looking for fractional parts
-    has_monthly_data = np.any(np.mod(time_values, 1) > 0)
-    
-    if has_monthly_data:
-        # For monthly data, create custom tick positions and labels
-        # Find the unique years
-        years = np.unique(np.floor(time_values).astype(int))
-        
-        # If we have a single year of data
-        if len(years) == 1:
-            # Set custom ticks at each month position
-            tick_positions = []
-            tick_labels = []
-            
-            # Month abbreviations
-            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            
-            year = years[0]
-            for month in range(12):
-                decimal_time = year + month/12.0
-                # Check if this month exists in our data
-                if any(np.isclose(time_values, decimal_time, atol=0.01)):
-                    tick_positions.append(decimal_time)
-                    tick_labels.append(f"{month_names[month]}")
-            
-            # Set custom ticks
-            axis.set_xticks(tick_positions)
-            axis.set_xticklabels(tick_labels, rotation=45, ha='right')
-            
-            # Set the title to include the year
-            axis.set_title(f"{axis.get_title()} ({year})")
-        else:
-            # For multiple years, show tick at start of each year and some months
-            tick_positions = []
-            tick_labels = []
-            
-            for year in years:
-                tick_positions.append(year)
-                tick_labels.append(f"{year}")
-                
-                # Add mid-year tick if we have fewer than 5 years
-                if len(years) < 5:
-                    tick_positions.append(year + 0.5)
-                    tick_labels.append(f"Jul {year}")
-            
-            axis.set_xticks(tick_positions)
-            axis.set_xticklabels(tick_labels, rotation=45 if len(years) < 5 else 0)
-        
-        # Add more space at the bottom for rotated labels
-        #plt.subplots_adjust(bottom=0.15, right=0.85)
-    else:
-        # For annual data, use integer ticks
-        if len(time_values) <= 10:
-            # For a small number of years, show all years
-            axis.set_xticks(time_values)
-            axis.set_xticklabels([str(int(year)) for year in time_values])
-        else:
-            # For many years, let matplotlib handle the ticks
-            axis.xaxis.set_major_locator(plt.MaxNLocator(integer=True)) 
-
-        axis.grid(grid_visible)
+    axis.grid(grid_visible)
     return axis
 
 def handle_time_extraction_type(file_paths, variables, NetCDF_Type, scale='none'):
@@ -1533,35 +1429,16 @@ def obtain_time_series_xarray(
         time_dimension = total_value.dims[0]
         sum_dimensions = (total_value.dims[-2], total_value.dims[-1])
 
-        # Debug prints
-        # Debug prints
-        print(f"Time dimension: {time_dimension}")
-        print(f"Time values: {total_value.coords['time'].values}")
-        print(f"Raw data shape: {total_value.shape}")
-        print(f"Raw data range: min={total_value.min().item():.5e}, max={total_value.max().item():.5e}")
-
-        # **ADD THIS DEBUGGING BLOCK HERE**
         # Check for problematic values in raw data
         raw_data = total_value.values
-        print(f"Raw data statistics:")
-        print(f"  - Non-zero values: {np.count_nonzero(raw_data)} out of {raw_data.size}")
-        print(f"  - Positive values: {np.sum(raw_data > 0)} out of {raw_data.size}")
-        print(f"  - NaN values: {np.sum(np.isnan(raw_data))}")
-        print(f"  - Infinite values: {np.sum(np.isinf(raw_data))}")
         
         # Check each time slice
         for t in range(min(3, total_value.shape[0])):  # Check first 3 time slices
             time_slice = total_value.isel(time=t).values
-            print(f"  - Time slice {t}: min={np.nanmin(time_slice):.5e}, max={np.nanmax(time_slice):.5e}, positive_count={np.sum(time_slice > 0)}")
 
         time_mean_data = total_value.mean(dim="time")
-        print(f"Shape of time_mean_data: {time_mean_data.shape}")
 
-        print(f"Time mean data statistics:")
         mean_data = time_mean_data.values
-        print(f"  - Range: min={np.nanmin(mean_data):.5e}, max={np.nanmax(mean_data):.5e}")
-        print(f"  - Non-zero values: {np.count_nonzero(mean_data)} out of {mean_data.size}")
-        print(f"  - Positive values: {np.sum(mean_data > 0)} out of {mean_data.size}")
         
         # Check for extreme values
         if np.nanmax(mean_data) / np.nanmin(mean_data[mean_data > 0]) > 1e10:
@@ -1589,6 +1466,14 @@ def obtain_time_series_xarray(
         else:
             total_data_array = total_value.sum(dim=sum_dimensions).values
             print("Regular Sum Implemented")
+
+        # CO2n unit conversion
+        if variables and any('CO2n' in str(var) for var in variables):
+            total_data_array = total_data_array / 1e9
+            units = units.replace('kg', 'Tg').replace('Kg', 'Tg')
+
+        # Get time values (continues with existing code...)
+        time_values = total_value.coords["time"].values
 
         # Get time values
         time_values = total_value.coords["time"].values
@@ -1644,10 +1529,6 @@ def obtain_time_series_xarray(
                         time_values = time_values[:len(total_data_array)]
                 
                     print(f"Created {len(time_values)} time points")
-
-        print(f"Time values shape: {time_values.shape}")
-        print(f"Total data array shape: {total_data_array.shape}")
-        print(f"First few time values: {time_values[:5]}")
 
         # Make sure the lengths match before creating column stack
         if len(time_values) != len(total_data_array):
@@ -1778,11 +1659,6 @@ def save_combined_netcdf(all_datasets, output_dir, annual, global_year_min, glob
         
         # Save to NetCDF
         ds.to_netcdf(output_path)
-        print(f"\n=== Combined NetCDF saved ===")
-        print(f"File: {output_path}")
-        print(f"Datasets included: {list(all_datasets.keys())}")
-        print(f"Time points: {len(reference_time)}")
-        print(f"Variables saved: {list(data_vars.keys())}")
         
         return True
         
@@ -1792,7 +1668,7 @@ def save_combined_netcdf(all_datasets, output_dir, annual, global_year_min, glob
         traceback.print_exc()
         return False
 
-def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=False, save_netcdf=False,seasonality=False):
+def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual=False, save_netcdf=False):
     """
     Run time series analysis for multiple datasets
     Parameters
@@ -1807,23 +1683,25 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
        Default is False 
     save_netcdf : bool, optional
         Whether to save NetCDF files
-    seasonality : bool, optional
-        If True, calculate and plot seasonal statistics instead of time series
-        Default is False
     """
 
-    # Create appropriate subplot based on analysis type
-    if seasonality:
-        fig, time_analysis_axis = plt.subplots(figsize=(12, 6))
-        time_analysis_axis.set_xlabel("Month")
-        time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
-        time_analysis_axis.set_title(f"Seasonal Analysis - {time_analysis_figure_data['title']}")
-        time_analysis_axis.set_xticks(range(1, 13))
-        time_analysis_axis.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
-    else:
-        fig, time_analysis_axis = plt.subplots(figsize=(14, 6))  # Wider for time series + legend
+    # Create three separate figures: monthly time series, annual total, and seasonality
+    fig_timeseries, axis_timeseries = plt.subplots(figsize=(16, 6))
+    fig_seasonality, axis_seasonality = plt.subplots(figsize=(15, 6))
+    fig_annual, axis_annual = plt.subplots(figsize=(16, 6))
 
+    # Configure seasonality plot
+    axis_seasonality.set_xlabel("Month")
+    axis_seasonality.set_ylabel(time_analysis_figure_data["ylabel"]) 
+    axis_seasonality.set_title(f"Seasonal Analysis - {time_analysis_figure_data['title']}")
+    axis_seasonality.set_xticks(range(1, 13))
+    axis_seasonality.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+
+    # Configure annual totals plot 
+    axis_annual.set_xlabel("Year") 
+    axis_annual.set_ylabel(time_analysis_figure_data["ylabel"]) 
+    axis_annual.set_title(f"Annual Totals - {time_analysis_figure_data['title']}")
 
     global_year_max = 0
     global_year_min = 9999
@@ -1831,22 +1709,22 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
     # Make sure the output directory exists before saving files
     output_dir = time_analysis_figure_data['figs_folder']
     os.makedirs(output_dir, exist_ok=True)
-    print(f"Ensuring output directory exists: {output_dir}")
 
     # Get logmapscale setting from configuration (default to True if not specified)
     logmapscale = time_analysis_figure_data.get('logmapscale', True)
-    print(f"Using logmapscale setting: {logmapscale}")
 
     # Initialize dictionary to store all datasets for combined NetCDF
     all_datasets = {}
 
     for index, folder_data in enumerate(folder_data_list):
+
         map_figure, map_axis = plt.subplots(
             nrows=1,
             ncols=1,
             figsize=(18, 10),
             subplot_kw={"projection": ccrs.PlateCarree()},
         )
+        map_figure.set_visible(False)
 
         folder_path, figure_data, file_type, variables = (
             folder_data["folder_path"],
@@ -1855,12 +1733,7 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             folder_data["variables"],
         )
 
-        print(f"\nProcessing dataset {index+1}/{len(folder_data_list)}: {file_type}")
-        print(f"Variables: {variables}")
-        print(f"Folder path: {folder_path}")
-        print(f"Annual aggregation: {annual}") 
-        print(f"Seasonality analysis: {seasonality}")
-
+        # Get data for this dataset
         (
             time_mean_data,
             data_per_year_stack,
@@ -1879,52 +1752,66 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
 
         figure_label = f"{figure_data['label']} ({start_year}-{end_year})" 
 
-        print(f"=== DEBUGGING MAP DATA ===")
-        print(f"time_mean_data shape: {time_mean_data.shape if hasattr(time_mean_data, 'shape') else 'No shape attr'}")
-        print(f"longitude shape: {longitude.shape if hasattr(longitude, 'shape') else 'No shape attr'}")
-        print(f"latitude shape: {latitude.shape if hasattr(latitude, 'shape') else 'No shape attr'}")
-        print(f"units: {units}")
-        print(f"figure_label: {figure_label}")
-        print(f"=== END DEBUGGING MAP DATA ===\n")
-
-        #Map plotting functionality
-        map_plot(
-            figure=map_figure,
-            axis=map_axis,
-            axis_length=1,
-            axis_index=index,
-            decade_data=time_mean_data,
-            longitude=longitude,
-            latitude=latitude,
-            subplot_title=figure_label,
-            units=units,
-            cbarmax=figure_data["cbarmax"],
-            logMap=logmapscale,
-        )
-
-        #Plot time series
-        if seasonality:
-            seasonal_data = calculate_seasonal_statistics(data_per_year_stack)
-            seasonal_time_series_plot(
-                axis=time_analysis_axis,
-                seasonal_data=seasonal_data,
-                marker=figure_data["marker"],
-                line_style=figure_data["line_style"],
-                color=figure_data["color"],
-                label=figure_label,
-            )
+        # Create and save individual map
+        if time_mean_data is not None: 
+            map_plot( 
+                     figure=map_figure, 
+                     axis=map_axis, 
+                     axis_length=1, 
+                     axis_index=0, 
+                     decade_data=time_mean_data, 
+                     longitude=longitude, 
+                     latitude=latitude, 
+                     subplot_title=figure_label, 
+                     units=units, 
+                     cbarmax=figure_data["cbarmax"], 
+                     logMap=logmapscale
+                     )
         else:
+            print(f"Warning: time_mean_data is None for dataset {index+1}")
+
+        #Save each map immediately and close the figure
+        map_figure.savefig(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
+        plt.close(map_figure)  # Close the map figure to free memory
+        print(f"Saved and closed: map_figure_{index}")
+
+        # Plot BOTH time series and seasonality for this dataset
+        if data_per_year_stack is not None and len(data_per_year_stack) > 0:
+
             #Long time series plotting
             time_series_plot(
-                axis=time_analysis_axis,
+                axis=axis_timeseries,
                 data=data_per_year_stack,
                 marker=figure_data["marker"],
                 line_style=figure_data["line_style"],
                 color=figure_data["color"],
                 label=figure_label,
             )
+
+            seasonal_data = calculate_seasonal_statistics(data_per_year_stack)
+            seasonal_time_series_plot(
+                axis=axis_seasonality,
+                seasonal_data=seasonal_data,
+                marker=figure_data["marker"],
+                line_style=figure_data["line_style"],
+                color=figure_data["color"],
+                label=figure_label,
+            )
+
+                        # Calculate annual totals from monthly data
+            annual_totals_data = calculate_annual_totals(data_per_year_stack)
+            if annual_totals_data is not None:
+                time_series_plot(
+                    axis=axis_annual,
+                    data=annual_totals_data,
+                    marker=figure_data["marker"],
+                    line_style=figure_data["line_style"],
+                    color=figure_data["color"],
+                    label=figure_label,
+                )
+
         #Update global year range (only for non-seasonal analysis)
-        if not seasonality:
+        if data_per_year_stack is not None and len(data_per_year_stack) > 0:
             if np.issubdtype(type(data_per_year_stack[0, 0]), np.floating):
                 year_max = int(np.ceil(data_per_year_stack[:, 0].max()))
                 year_min = int(np.floor(data_per_year_stack[:, 0].min()))
@@ -1935,72 +1822,137 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             global_year_max = max(global_year_max, year_max)
             global_year_min = min(global_year_min, year_min)
 
-        print(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
-
-        #Save individual map figures
-        map_figure.savefig(f"{time_analysis_figure_data['figs_folder']}/map_figure_{index}")
-
         #Store dataset info for NetCDF
-        all_datasets[f"{file_type}_{variables}"] = {
-            'data': np.sum(data_per_year_stack[:, 1]) if len(data_per_year_stack.shape) > 1 else np.sum(data_per_year_stack),
-            'time': list(range(int(start_year), int(end_year) + 1)),
-            'units': units,
-            'start_year': start_year,
-            'end_year': end_year,
-            'variables': variables,
-            'file_type': file_type,
-            'folder_path': folder_path
-        }
+        if data_per_year_stack is not None and len(data_per_year_stack) > 0: 
+            all_datasets[f"{file_type}_{variables}"] = { 
+                'data': np.sum(data_per_year_stack[:, 1]) if len(data_per_year_stack.shape) > 1 else np.sum(data_per_year_stack),
+                'time': list(range(int(start_year), int(end_year) + 1)), 
+                'units': units, 
+                'start_year': start_year, 
+                'end_year': end_year, 
+                'variables': variables, 
+                'file_type': file_type, 
+                'folder_path': folder_path 
+                }
 
         #Save combined NetCDF file with all datasets 
         if save_netcdf and all_datasets:
             save_combined_netcdf(all_datasets, output_dir, annual, global_year_min, global_year_max)
 
-        #Set labels for time series (non-seasonal) plots 
-        if not seasonality: 
-            if annual: 
-                xlabel = f"Yearly Data ({global_year_min}-{global_year_max})" 
-            else: 
-                xlabel = f"Monthly Data ({global_year_min})" 
-                time_analysis_axis.set_title(time_analysis_figure_data["title"]) 
-                time_analysis_axis.set_xlabel(xlabel) 
-                time_analysis_axis.set_ylabel(time_analysis_figure_data["ylabel"])
-    
-        #Manual legend creation and positioning 
-        handles, labels = time_analysis_axis.get_legend_handles_labels() 
-        legend = time_analysis_axis.legend( 
-                                           handles, labels, 
-                                           loc="center left", 
-                                           fontsize='medium', 
-                                           bbox_to_anchor=(1.02, 0.5),  # Right side, vertically centered 
-                                           frameon=True, 
-                                           fancybox=True, 
-                                           shadow=True) 
-        #Layout adjustments 
-        plt.tight_layout() 
-        if not seasonality: 
-            plt.subplots_adjust(right=0.8)  # More space needed for time series legend
+    #Set labels for time series (non-seasonal) plots 
+    if annual: 
+        xlabel = f"Yearly Data ({global_year_min}-{global_year_max})" 
+    else: 
+        xlabel = f"Monthly Data ({global_year_min})" 
+
+    axis_timeseries.set_title(time_analysis_figure_data["title"]) 
+    axis_timeseries.set_xlabel(xlabel) 
+    axis_timeseries.set_ylabel(time_analysis_figure_data["ylabel"])
+   
+    # Format x-axis ticks for the full range
+    if annual: 
+        # For annual data, use integer ticks 
+        years = range(global_year_min, global_year_max + 1) 
+        if len(years) <= 10: 
+            axis_timeseries.set_xticks(years) 
+            axis_timeseries.set_xticklabels([str(year) for year in years]) 
         else: 
-            plt.subplots_adjust(right=0.85)  # Less space needed for seasonal plots 
+            axis_timeseries.xaxis.set_major_locator(plt.MaxNLocator(integer=True)) 
+    else: 
+        # For monthly data, let matplotlib handle it automatically 
+        axis_timeseries.xaxis.set_major_locator(plt.MaxNLocator(nbins=10))
 
-        #Save with appropriate filename and bbox_inches='tight' 
-        filename_suffix = "_seasonality" if seasonality else "" 
-        plt.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure{filename_suffix}",
-                    bbox_inches='tight', dpi=300, facecolor='white') 
+    #Manual legend creation and positioning 
+    handles_ts, labels_ts = axis_timeseries.get_legend_handles_labels() 
+    if handles_ts: 
+        legend_ts = axis_timeseries.legend( 
+                                       handles_ts, labels_ts, 
+                                       loc="center left", 
+                                       fontsize='medium', 
+                                       bbox_to_anchor=(1.02, 0.5),  # Right side, vertically centered 
+                                       frameon=True, 
+                                       fancybox=True, 
+                                       shadow=True) 
+    #Layout adjustments 
+    plt.figure(fig_timeseries.number)
+    plt.tight_layout() 
+    plt.subplots_adjust(right=0.75)  # More space needed for time series legend
+    plt.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure",
+                bbox_inches='tight', dpi=300, facecolor='white') 
 
-        plt.show()
+    # Add legend for seasonality 
+    handles_seas, labels_seas = axis_seasonality.get_legend_handles_labels() 
+    if handles_seas: 
+        legend_seas = axis_seasonality.legend( 
+                                              handles_seas, labels_seas,
+                                              loc="center left", 
+                                              fontsize='medium', 
+                                              bbox_to_anchor=(1.02, 0.5), 
+                                              frameon=True, 
+                                              fancybox=True, 
+                                              shadow=True
+                                              )
+    # Layout and save seasonality 
+    plt.figure(fig_seasonality.number) 
+    plt.tight_layout() 
+    plt.subplots_adjust(right=0.8) 
+    plt.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure_seasonality", 
+                bbox_inches='tight', dpi=300, facecolor='white') 
 
-        # Create difference maps if more than one dataset is provided 
-        if len(folder_data_list) > 1: 
-            print("\n=== Creating difference maps between datasets ===")
+        # Configure and save annual totals plot
+    handles_annual, labels_annual = axis_annual.get_legend_handles_labels()
+    if handles_annual:
+        legend_annual = axis_annual.legend(
+                                          handles_annual, labels_annual,
+                                          loc="center left",
+                                          fontsize='medium',
+                                          bbox_to_anchor=(1.02, 0.5),
+                                          frameon=True,
+                                          fancybox=True,
+                                          shadow=True
+                                          )
 
-            # Get the first two datasets for comparison
-            first_selection = 0
-            second_selection = 1
+    # Layout and save annual totals
+    plt.figure(fig_annual.number)
+    plt.tight_layout()
+    plt.subplots_adjust(right=0.8)
+    plt.savefig(f"{time_analysis_figure_data['figs_folder']}/time_analysis_figure_annual_totals",
+                bbox_inches='tight', dpi=300, facecolor='white')
 
-            folder_data_one = folder_data_list[first_selection]
-            folder_data_two = folder_data_list[second_selection]
+    # Show both plots
+    fig_timeseries.show()
+    fig_seasonality.show()
+    fig_annual.show()
 
+    # Keep the script running so plots stay visible 
+    print("Plots are now displayed. Close the plot windows manually or press Ctrl+C to exit.") 
+    try: 
+        plt.show(block=True)  # This will wait until all windows are closed 
+    except KeyboardInterrupt: 
+        print("Interrupted by user") 
+
+    # Create difference maps if more than one dataset is provided (OPTIONAL)
+    create_difference_maps = False  # Change to True if you want difference maps
+
+    # Create difference maps if more than one dataset is provided 
+    if len(folder_data_list) > 1 and create_difference_maps: 
+        print("\n=== Creating difference maps between datasets ===")
+
+
+    # Create difference maps if more than one dataset is provided (OPTIONAL)
+    create_difference_maps = False  # Change to True if you want difference maps
+
+    if len(folder_data_list) > 1 and create_difference_maps:
+        print("\n=== Creating difference maps between datasets ===")
+        
+        # Get the first two datasets for comparison
+        first_selection = 0
+        second_selection = 1
+        
+        folder_data_one = folder_data_list[first_selection]
+        folder_data_two = folder_data_list[second_selection]
+        
+        try:
             # Get data for both datasets
             (
                 time_mean_data_one,
@@ -2035,7 +1987,8 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
             )
 
             # Check if datasets are compatible for difference calculation
-            if (time_mean_data_one.shape == time_mean_data_two.shape and
+            if (time_mean_data_one is not None and time_mean_data_two is not None and
+                time_mean_data_one.shape == time_mean_data_two.shape and
                 np.array_equal(longitude_one, longitude_two) and
                 np.array_equal(latitude_one, latitude_two)):
 
@@ -2073,12 +2026,17 @@ def run_time_series_analysis(folder_data_list, time_analysis_figure_data, annual
                 map_figure.savefig( 
                     f"{time_analysis_figure_data['figs_folder']}/figure{first_selection}_and_figure{second_selection}_diff_map"
                                    )
-
+                #Close the figure without showing it
+                plt.close(map_figure)
+                print(f"Difference map saved (not displayed): figure{first_selection}_and_figure{second_selection}_diff_map")
                 print(f"Difference map saved as: figure{first_selection}_and_figure{second_selection}_diff_map") 
             else: 
                 print("Warning: Datasets have incompatible dimensions for difference calculation")
                 print(f"Dataset 1 shape: {time_mean_data_one.shape}") 
                 print(f"Dataset 2 shape: {time_mean_data_two.shape}")
+        except Exception as e: 
+            print(f"Error creating difference maps: {e}")
+            print("Skipping difference map creation")
 
 def calculate_seasonal_statistics(data_per_year_stack):
     """
@@ -2137,6 +2095,45 @@ def seasonal_time_series_plot(axis, seasonal_data, marker, line_style, color, la
         axis.fill_between(months, means - stds, means + stds, alpha=0.2, color=color)
     
     axis.grid(True)
+
+def calculate_annual_totals(data_per_year_stack):
+    """
+    Calculate annual totals from monthly time series data
+    
+    Parameters:
+    -----------
+    data_per_year_stack : numpy.ndarray
+        Array with columns [time, value] where time is decimal years (e.g., 2009.0, 2009.083...)
+    
+    Returns:
+    --------
+    numpy.ndarray or None
+        Array with columns [year, annual_total] or None if not monthly data
+    """
+    if data_per_year_stack is None or len(data_per_year_stack) == 0:
+        return None
+    
+    times = data_per_year_stack[:, 0]
+    values = data_per_year_stack[:, 1]
+    
+    # Check if we have monthly data (decimal years like 2009.0, 2009.083, 2009.167...)
+    unique_years = np.unique(np.floor(times).astype(int))
+    
+    # Group by year and sum monthly values
+    annual_data = []
+    for year in unique_years:
+        # Find all data points for this year
+        year_mask = (np.floor(times) == year)
+        year_values = values[year_mask]
+        
+        # Sum all monthly values for this year to get annual total
+        annual_total = np.sum(year_values)
+        annual_data.append([year, annual_total])
+    
+    if len(annual_data) == 0:
+        return None
+        
+    return np.array(annual_data)
 
 def run_time_series_diff_analysis(folder_data_one, folder_data_two):
     """

@@ -32,7 +32,7 @@ def utilityRunner():
                 folder_data_list=script_env_data["folders"],
                 time_analysis_figure_data=script_env_data["time_analysis_figure_data"],
                 annual=annual,  # Explicitly pass the annual parameter
-                save_netcdf=save_netcdf  # Add this parameter
+                save_netcdf=False #save_netcdf,  # Add this parameter
             )
 
         else:
