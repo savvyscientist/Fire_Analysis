@@ -2052,7 +2052,6 @@ def calculate_seasonal_statistics(data_per_year_stack):
     seasonal_data : numpy.ndarray
         Array with columns [month (1-12), mean_value, std_value]
     """
-    import pandas as pd
     
     # Convert to DataFrame for easier manipulation
     if data_per_year_stack.shape[1] == 3:  # [year, month, values]
