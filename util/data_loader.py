@@ -70,14 +70,14 @@ class DataLoader:
     def __init__(self, grid_area_calculator=None):
         self.grid_area_calculator = grid_area_calculator
         self._loaders = {
-            'ModelE': lambda p,v,a: self._load_format(p,v,a, self._read_ModelE, False),
-            'ModelE_Monthly': lambda p,v,a: self._load_format(p,v,a, self._read_ModelE, True),
-            'BA_GFED4': lambda p,v,a: self._load_gfed4_format(p,v,a, False),
-            'BA_GFED4_upscale': lambda p,v,a: self._load_gfed4_format(p,v,a, True),
-            'BA_GFED5': lambda p,v,a: self._load_gfed5_format(p,v,a, False),
-            'BA_GFED5_upscale': lambda p,v,a: self._load_gfed5_format(p,v,a, True),
-            'GFED4s_Monthly': lambda p,v,a: self._load_emis_format(p,v,a),
-            'FINN2.5_Monthly': lambda p,v,a: self._load_emis_format(p,v,a),
+            'ModelE': lambda p,v,a: self._load_format(p,v,a,n,s, self._read_ModelE, False),
+            'ModelE_Monthly': lambda p,v,a: self._load_format(p,v,a,n,s, self._read_ModelE, True),
+            'BA_GFED4': lambda p,v,a: self._load_gfed4_format(p,v,a,n,s, False),
+            'BA_GFED4_upscale': lambda p,v,a: self._load_gfed4_format(p,v,a,n,s, True),
+            'BA_GFED5': lambda p,v,a: self._load_gfed5_format(p,v,a,n,s, False),
+            'BA_GFED5_upscale': lambda p,v,a: self._load_gfed5_format(p,v,a,n,s, True),
+            'GFED4s_Monthly': lambda p,v,a: self._load_emis_format(p,v,a,n,s),
+            'FINN2.5_Monthly': lambda p,v,a: self._load_emis_format(p,v,a,n,s),
         }
     
     def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
@@ -94,43 +94,43 @@ class DataLoader:
             traceback.print_exc()
             return None
     
-    def _load_format(self, folder_path, variables, annual, reader_func, monthly):
+    def _load_format(self, folder_path, variables, annual, name, spatial_aggregation, reader_func, monthly):
         """Generic loader for ModelE formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
-        total_value, lon, lat = reader_func(files, variables, monthly)
-        return self._process_data(total_value, lon, lat, annual)
+        total_value, lon, lat = reader_func(files, variables, monthly, name)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
     
-    def _load_gfed4_format(self, folder_path, variables, annual, upscaled):
+    def _load_gfed4_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
         """Loader for GFED4 formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = self._read_gfed4s(files, upscaled)
-        return self._process_data(total_value, lon, lat, annual)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
     
-    def _load_gfed5_format(self, folder_path, variables, annual, upscaled):
+    def _load_gfed5_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
         """Loader for GFED5 formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = self._read_gfed5(files, variables, upscaled)
-        return self._process_data(total_value, lon, lat, annual)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
     
-    def _load_emis_format(self, folder_path, variables, annual):
+    def _load_emis_format(self, folder_path, variables, annual, name, spatial_aggregation):
         """Loader for emissions formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = self._read_modelEinput_emis(files, variables)
-        return self._process_data(total_value, lon, lat, annual)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
     
-    def _read_ModelE(self, files, variables, monthly=False):
+    def _read_ModelE(self, files, variables, monthly=False, name=None):
         """Read ModelE NetCDF files - WITH PROPER UNIT CONVERSION."""
         print(f"\n=== Reading ModelE data ===")
         print(f"Number of files: {len(files)}")
