@@ -1,46 +1,120 @@
 {
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
+    "save_netcdf": true,  
     "time_analysis_figure_data": {
       "annual": false,
-      "title": "BA",
-      "ylabel": "BA",
-      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/bugsfix_BA"
+      "title": "CO2 Emissions",
+      "ylabel": "Tg CO2",
+      "logmapscale": false,
+      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_CO2"
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/modelE/CC_pyrE/tracersE3/pyrE_bugs/modelE/decks/E6TomaF40pyrEbugsfix/2005",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_fuel/AIJ",
         "file_type": "ModelE_Monthly",
-        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
+        "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "r",
+          "color": "blue",
           "marker": "o",
           "line_style": "-",
-          "label": "bugs fix",
+          "label": "All fuels CC const",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/modelE/CC_pyrE/tracersE3/pyrE_bugs/modelE/decks/E6TomaF40pyrEbugsfixstash/2005",
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem/AIJ",
         "file_type": "ModelE_Monthly",
-        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
+        "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "b",
-          "marker": "x",
+          "color": "magenta",
+          "marker": "o",
           "line_style": "-",
-          "label": "orig",
+          "label": "Stem CC const",
           "cbarmax": null 
         }
       },
       {
-        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale/2005",
-        "file_type": "BA_GFED5_upscale",
-        "variables": ['Nat'],
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem0_1/AIJ",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "k",
-          "marker": "*",
+          "color": "magenta",
+          "marker": "o",
+          "line_style": ":",
+          "label": "Stem 0.1 CC const",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem0_01/AIJ",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "magenta",
+          "marker": "o",
+          "line_style": "--",
+          "label": "Stem 0.01 CC const",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/AIJ",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "olive",
+          "marker": "o",
           "line_style": "-",
-          "label": "GFED5 NAT",
+          "label": "Litter CC const",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "maroon",
+          "marker": "o",
+          "line_style": "-",
+          "label": "Foliage CC const",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_cwd/AIJ",
+        "file_type": "ModelE_Monthly",
+        "variables": ["CO2n_emis"],
+        "figure_data": {
+          "color": "purple",
+          "marker": "o",
+          "line_style": "-",
+          "label": "CWD CC const",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",
+        "file_type": "GFED4s_Monthly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "red",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED4s CO2 Emissions",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/FINN2.5modisviirs_emis",
+        "file_type": "FINN2.5_Monthly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "green",
+          "marker": "o",
+          "line_style": ":",
+          "label": "FINN2012 CO2 Emissions",
           "cbarmax": null 
         }
       }

@@ -1,0 +1,197 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         SCIENTIFIC DATA ANALYSIS - UNIT CONVERSION UPDATE PACKAGE            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📦 PACKAGE CONTENTS
+═══════════════════
+
+START HERE:
+┌──────────────────────────────────────────────────────────────────────────┐
+│ README.md                          │ Package overview & quick start      │
+│ QUICK_REFERENCE.md                 │ Cheat sheet (2 min read)           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+IMPLEMENTATION FILES (Copy these to your project):
+┌──────────────────────────────────────────────────────────────────────────┐
+│ config.py                          │ Updated config classes (135 lines) │
+│ unit_converter.py                  │ Enhanced converter (313 lines)     │
+│ workflow.py                        │ Updated workflow (415 lines)       │
+│ utilityEnvVar_updated.json         │ Example configuration              │
+└──────────────────────────────────────────────────────────────────────────┘
+
+DOCUMENTATION:
+┌──────────────────────────────────────────────────────────────────────────┐
+│ SUMMARY.md                         │ Overview of changes (5 min)        │
+│ UNIT_CONVERSION_GUIDE.md           │ Comprehensive guide (15 min)       │
+└──────────────────────────────────────────────────────────────────────────┘
+
+REFERENCE:
+┌──────────────────────────────────────────────────────────────────────────┐
+│ workflow_original.py               │ Backup of original workflow        │
+└──────────────────────────────────────────────────────────────────────────┘
+
+
+✨ KEY FEATURES
+═══════════════
+
+Feature 1: TARGET UNIT CONVERSION
+  Before: "ylabel": "Tg CO2"  ← Hardcoded
+  After:  "target_units": "Tg CO2/yr"  ← Automatic conversion
+  
+  ✓ Convert kg → Tg, /s → /yr, etc.
+  ✓ Automatic ylabel from converted units
+  ✓ Consistent units across datasets
+
+Feature 2: SPATIAL AGGREGATION CONTROL
+  Before: Always summed (wrong for intensive quantities)
+  After:  "spatial_aggregation": "total" or "mean"
+  
+  ✓ "total" for emissions, burned area (extensive)
+  ✓ "mean" for flammability, temperature (intensive)
+  ✓ Per-dataset control
+
+
+📋 QUICK START
+═══════════════
+
+Step 1: Copy files to your project
+   $ cp config.py unit_converter.py workflow.py /your/project/
+
+Step 2: Update your JSON configuration
+   Add two new fields:
+   
+   {
+     "spatial_aggregation": "total",  ← NEW
+     "figure_data": {
+       "target_units": "Tg CO2/yr"    ← NEW
+     }
+   }
+
+Step 3: Run analysis
+   $ python main.py
+
+
+🎯 WHEN TO USE WHAT
+═══════════════════
+
+Use "total" (sum) for:              Use "mean" (average) for:
+┌────────────────────────────────┐  ┌──────────────────────────────┐
+│ ✓ Burned area                  │  │ ✓ Flammability               │
+│ ✓ Emissions (CO2, CH4)         │  │ ✓ Combustion completeness    │
+│ ✓ Fire counts                  │  │ ✓ Temperature                │
+│ ✓ Production/consumption       │  │ ✓ Precipitation rate         │
+│                                │  │ ✓ Indices and fractions      │
+│ → Extensive quantities         │  │ → Intensive quantities       │
+│   (depend on system size)      │  │   (independent of size)      │
+└────────────────────────────────┘  └──────────────────────────────┘
+
+
+📊 EXAMPLE CONFIGURATION
+════════════════════════
+
+{
+  "time_analysis_figure_data": {
+    "title": "CO2 Emissions",
+    "ylabel": "Emissions",                ← Will be replaced
+    "spatial_aggregation": "total"        ← Global default
+  },
+  "folders": [
+    {
+      "folder_path": "/data/model",
+      "variables": ["CO2n_emis"],
+      "spatial_aggregation": "total",     ← Per-dataset
+      "figure_data": {
+        "label": "Model",
+        "target_units": "Tg CO2/yr"       ← Automatic conversion
+      }
+    }
+  ]
+}
+
+
+🔄 CONVERSION FLOW
+═══════════════════
+
+Raw Data: "10^-3 kg m-2 s-1"
+    ↓
+Extract scaling factor (× 0.001)
+    ↓
+Area integration (× grid_area_m2)
+    → "kg/s"
+    ↓
+Time scaling (× 31,536,000 seconds/year)
+    → "kg/yr"
+    ↓
+Target conversion (÷ 10^9)
+    → "Tg CO2/yr"
+    ↓
+Used in ylabel and colorbar labels
+
+
+📖 READING ORDER
+════════════════
+
+For quick implementation:
+  1. README.md          ← Overview
+  2. QUICK_REFERENCE.md ← Syntax cheat sheet
+  3. Update your JSON   ← Apply changes
+  4. Test              ← Verify results
+
+For deep understanding:
+  1. SUMMARY.md                 ← What changed and why
+  2. UNIT_CONVERSION_GUIDE.md   ← All features explained
+  3. Review code files          ← Implementation details
+
+
+⚙️ TECHNICAL INFO
+═════════════════
+
+Supported mass prefixes: Pg, Tg, Gg, Mg, kg, g
+Supported time units:    /s, /month, /yr
+Python version:          3.7+
+Dependencies:            numpy, pandas, xarray (unchanged)
+Lines of code:           ~1,200 (updated files)
+Lines of docs:           ~900
+Total package:           ~2,100 lines
+
+
+✅ BACKWARDS COMPATIBILITY
+═══════════════════════════
+
+✓ Old configurations work without changes
+✓ New features are opt-in
+✓ Default behavior matches previous version
+✓ No breaking changes
+
+
+🆘 TROUBLESHOOTING
+══════════════════
+
+Units not converting?
+  → Check mass prefix spelling (Tg not TG)
+  → Verify time unit format (/yr not /year)
+
+Wrong totals?
+  → Verify spatial_aggregation setting
+  → Check if quantity is extensive or intensive
+
+Ylabel not updating?
+  → Ensure target_units specified
+  → Check workflow output for conversion messages
+
+
+📞 NEXT STEPS
+═════════════
+
+1. Read README.md for overview
+2. Review QUICK_REFERENCE.md for syntax
+3. Copy implementation files to your project
+4. Update your JSON configuration
+5. Test with your datasets
+6. Refer to UNIT_CONVERSION_GUIDE.md for details
+
+
+═══════════════════════════════════════════════════════════════════════════════
+Package Version: November 2025
+Total Files: 9 (4 code, 4 docs, 1 config)
+═══════════════════════════════════════════════════════════════════════════════
