@@ -80,13 +80,14 @@ class DataLoader:
             'FINN2.5_Monthly': lambda p,v,a: self._load_emis_format(p,v,a),
         }
     
-    def load_time_series(self, folder_path: str, file_type: str, variables: List[str], annual: bool = False):
+    def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
+                         name: str = None, spatial_aggregation: str = None, annual: bool = False):
         """Main entry point for loading data."""
         if file_type not in self._loaders:
             print(f"Unknown file type: {file_type}")
             return None
         try:
-            return self._loaders[file_type](folder_path, variables, annual)
+            return self._loaders[file_type](folder_path, variables, annual, name, spatial_aggregation)
         except Exception as e:
             print(f"Error loading {file_type}: {e}")
             import traceback
