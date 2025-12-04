@@ -4,7 +4,7 @@
     "save_netcdf": true,  
     "time_analysis_figure_data": {
       "annual": false,
-      "title": "CO2 Emissions",
+      "title": "CO2_Emissions",
       "ylabel": "Tg CO2",
       "logmapscale": false,
       "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_CO2"

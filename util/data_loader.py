@@ -70,14 +70,14 @@ class DataLoader:
     def __init__(self, grid_area_calculator=None):
         self.grid_area_calculator = grid_area_calculator
         self._loaders = {
-            'ModelE': lambda p,v,a: self._load_format(p,v,a,n,s, self._read_ModelE, False),
-            'ModelE_Monthly': lambda p,v,a: self._load_format(p,v,a,n,s, self._read_ModelE, True),
-            'BA_GFED4': lambda p,v,a: self._load_gfed4_format(p,v,a,n,s, False),
-            'BA_GFED4_upscale': lambda p,v,a: self._load_gfed4_format(p,v,a,n,s, True),
-            'BA_GFED5': lambda p,v,a: self._load_gfed5_format(p,v,a,n,s, False),
-            'BA_GFED5_upscale': lambda p,v,a: self._load_gfed5_format(p,v,a,n,s, True),
-            'GFED4s_Monthly': lambda p,v,a: self._load_emis_format(p,v,a,n,s),
-            'FINN2.5_Monthly': lambda p,v,a: self._load_emis_format(p,v,a,n,s),
+            'ModelE': lambda p,v,a,n,s: self._load_format(p,v,a,n,s, self._read_ModelE, False),
+            'ModelE_Monthly': lambda p,v,a,n,s: self._load_format(p,v,a,n,s, self._read_ModelE, True),
+            'BA_GFED4': lambda p,v,a,n,s: self._load_gfed4_format(p,v,a,n,s, False),
+            'BA_GFED4_upscale': lambda p,v,a,n,s: self._load_gfed4_format(p,v,a,n,s, True),
+            'BA_GFED5': lambda p,v,a,n,s: self._load_gfed5_format(p,v,a,n,s, False),
+            'BA_GFED5_upscale': lambda p,v,a,n,s: self._load_gfed5_format(p,v,a,n,s, True),
+            'GFED4s_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
+            'FINN2.5_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
         }
     
     def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
