@@ -11,54 +11,6 @@
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_fuel/AIJ",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
-        "figure_data": {
-          "color": "blue",
-          "marker": "o",
-          "line_style": "-",
-          "label": "All fuels CC const",
-          "cbarmax": null 
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem/AIJ",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
-        "figure_data": {
-          "color": "magenta",
-          "marker": "o",
-          "line_style": "-",
-          "label": "Stem CC const",
-          "cbarmax": null 
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem0_1/AIJ",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
-        "figure_data": {
-          "color": "magenta",
-          "marker": "o",
-          "line_style": ":",
-          "label": "Stem 0.1 CC const",
-          "cbarmax": null 
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_stem0_01/AIJ",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
-        "figure_data": {
-          "color": "magenta",
-          "marker": "o",
-          "line_style": "--",
-          "label": "Stem 0.01 CC const",
-          "cbarmax": null 
-        }
-      },
-      {
         "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/AIJ",
         "file_type": "ModelE_Monthly",
         "variables": ["CO2n_emis"],
@@ -102,7 +54,19 @@
           "color": "red",
           "marker": "o",
           "line_style": "-",
-          "label": "GFED4s CO2 Emissions",
+          "label": "GFED4s NAT",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/GFED5_emis",
+        "file_type": "GFED5_Monthly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "black",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED5 NAT",
           "cbarmax": null 
         }
       },
@@ -114,7 +78,7 @@
           "color": "green",
           "marker": "o",
           "line_style": ":",
-          "label": "FINN2012 CO2 Emissions",
+          "label": "FINN2012 ALL",
           "cbarmax": null 
         }
       }

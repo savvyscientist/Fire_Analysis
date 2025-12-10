@@ -7,7 +7,7 @@ from typing import List, Optional
 import numpy as np
 
 from config import ConfigManager, TimeAnalysisConfig, FolderConfig
-from data_loader import DataLoader, TimeSeriesData
+from data_loader import DataLoader, TimeSeriesData, save_time_series_data_to_netcdf
 from analysis import TimeSeriesAnalyzer
 from visualization import TimeSeriesPlotter, SpatialPlotter, PlotStyle
 from grid_utils import GridAreaCalculator
@@ -144,7 +144,21 @@ class TimeSeriesWorkflow:
                     # Update units
                     data.units = new_units
                     print(f"  Final units: {data.units}")
-                
+                # Prepare filename from configuration
+                label = folder_config.figure_data.label.replace(' ', '_').replace('/', '_')
+                # Use the first variable name for the output file
+                variable = folder_config.variables[0] if folder_config.variables else 'data' 
+            
+                output_filename = f"{label}_{variable}_processed.nc"
+                output_filepath = self.output_dir / output_filename
+            
+                print(f"  Saving processed data to NetCDF: {output_filename}")
+             
+                # Call the new save function (must be defined in data_loader.py)
+                save_time_series_data_to_netcdf(
+                    data=data,
+                    output_filepath=str(output_filepath),
+                    variable_name=variable) 
                 datasets.append((data, folder_config))
                 print(f"  ✓ Processing complete")
             else:

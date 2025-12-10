@@ -10,6 +10,7 @@ import h5py
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 from netCDF4 import Dataset
+from pathlib import Path
 
 from constants import MONTHLIST, DAYS_TO_SECONDS, KM_SQUARED_TO_M_SQUARED, MONTHLISTDICT, SECONDS_IN_A_YEAR
 
@@ -72,11 +73,12 @@ class DataLoader:
         self._loaders = {
             'ModelE': lambda p,v,a,n,s: self._load_format(p,v,a,n,s, self._read_ModelE, False),
             'ModelE_Monthly': lambda p,v,a,n,s: self._load_format(p,v,a,n,s, self._read_ModelE, True),
-            'BA_GFED4': lambda p,v,a,n,s: self._load_gfed4_format(p,v,a,n,s, False),
-            'BA_GFED4_upscale': lambda p,v,a,n,s: self._load_gfed4_format(p,v,a,n,s, True),
-            'BA_GFED5': lambda p,v,a,n,s: self._load_gfed5_format(p,v,a,n,s, False),
-            'BA_GFED5_upscale': lambda p,v,a,n,s: self._load_gfed5_format(p,v,a,n,s, True),
+            'BA_GFED4': lambda p,v,a,n,s: self._load_gfed4sba_format(p,v,a,n,s, False),
+            'BA_GFED4_upscale': lambda p,v,a,n,s: self._load_gfed4sba_format(p,v,a,n,s, True),
+            'BA_GFED5': lambda p,v,a,n,s: self._load_gfed5ba_format(p,v,a,n,s, False),
+            'BA_GFED5_upscale': lambda p,v,a,n,s: self._load_gfed5ba_format(p,v,a,n,s, True),
             'GFED4s_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
+            'GFED5_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
             'FINN2.5_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
         }
     
@@ -103,22 +105,22 @@ class DataLoader:
         total_value, lon, lat = reader_func(files, variables, monthly, name)
         return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
     
-    def _load_gfed4_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
-        """Loader for GFED4 formats."""
+    def _load_gfed4sba_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
+        """Loader for GFED4s formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
-        total_value, lon, lat = self._read_gfed4s(files, upscaled)
+        total_value, lon, lat = self._read_gfed4sba(files, upscaled)
         return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
-    
-    def _load_gfed5_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
+
+    def _load_gfed5ba_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
         """Loader for GFED5 formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
-        total_value, lon, lat = self._read_gfed5(files, variables, upscaled)
+        total_value, lon, lat = self._read_gfed5ba(files, variables, upscaled)
         return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
     
     def _load_emis_format(self, folder_path, variables, annual, name, spatial_aggregation):
@@ -247,7 +249,7 @@ class DataLoader:
             attrs=attribute_dict
         ), longitude, latitude
     
-    def _read_gfed5(self, files, variables, upscaled=False):
+    def _read_gfed5ba(self, files, variables, upscaled=False):
         """Read GFED5 NetCDF files - OPTIMIZED."""
         variables = variables if variables else ["Total"]
         
@@ -308,7 +310,7 @@ class DataLoader:
             attrs=attrs
         ), lons, lats
     
-    def _read_gfed4s(self, files, upscaled=False):
+    def _read_gfed4sba(self, files, upscaled=False):
         """Read GFED4s HDF5 files."""
         data_list, time_arr = [], []
         
@@ -485,3 +487,61 @@ class DatasetCombiner:
             start_year=max(data1.start_year, data2.start_year),
             end_year=min(data1.end_year, data2.end_year)
         )
+
+def save_time_series_data_to_netcdf(
+    data: TimeSeriesData,
+    output_filepath: str,
+    variable_name: str,
+    time_units: str = 'decimal_years'
+):
+    """
+    Saves the processed TimeSeriesData object (time series and spatial mean)
+    to a new NetCDF file using xarray.
+
+    Args:
+        data: The TimeSeriesData object containing processed data.
+        output_filepath: The full path where the NetCDF file will be saved.
+        variable_name: The name to use for the time series variable in the file.
+        time_units: Description of the time coordinate (e.g., 'decimal_years').
+    """
+    if not isinstance(data, TimeSeriesData):
+        print("Error: Input is not a valid TimeSeriesData object. Cannot save.")
+        return
+
+    try:
+        # 1. Prepare time series data (time, value)
+        times = data.time_series[:, 0]
+        values = data.time_series[:, 1]
+
+        # 2. Create DataArray for the Time Series
+        ts_da = xr.DataArray(
+            values,
+            coords={'time': times},
+            dims=['time'],
+            name=variable_name,
+            attrs={'units': data.units, 'long_name': f'Spatially Aggregated {variable_name}', 'time_units': time_units}
+        )
+
+        # 3. Create Dataset containing both spatial mean and time series
+        # data.time_mean is already an xr.DataArray with lat/lon coordinates
+        ds = xr.Dataset(
+            {
+                variable_name: ts_da,
+                'spatial_time_mean': data.time_mean
+            },
+            attrs={
+                'title': f'Processed Data for {variable_name}',
+                'time_range': f'{data.start_year} - {data.end_year}',
+                'created_by': 'TimeSeriesWorkflow'
+            }
+        )
+
+        # 4. Save to NetCDF
+        output_path = Path(output_filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        ds.to_netcdf(output_filepath)
+
+        print(f"\n✓ Successfully saved processed NetCDF file to: {output_filepath}")
+
+    except Exception as e:
+        print(f"\n❌ ERROR saving NetCDF file to {output_filepath}: {e}")
