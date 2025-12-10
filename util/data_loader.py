@@ -71,30 +71,68 @@ class DataLoader:
     def __init__(self, grid_area_calculator=None):
         self.grid_area_calculator = grid_area_calculator
         self._loaders = {
-            'ModelE': lambda p,v,a,n,s: self._load_format(p,v,a,n,s, self._read_ModelE, False),
-            'ModelE_Monthly': lambda p,v,a,n,s: self._load_format(p,v,a,n,s, self._read_ModelE, True),
-            'BA_GFED4': lambda p,v,a,n,s: self._load_gfed4sba_format(p,v,a,n,s, False),
-            'BA_GFED4_upscale': lambda p,v,a,n,s: self._load_gfed4sba_format(p,v,a,n,s, True),
-            'BA_GFED5': lambda p,v,a,n,s: self._load_gfed5ba_format(p,v,a,n,s, False),
-            'BA_GFED5_upscale': lambda p,v,a,n,s: self._load_gfed5ba_format(p,v,a,n,s, True),
-            'GFED4s_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
-            'GFED5_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
-            'FINN2.5_Monthly': lambda p,v,a,n,s: self._load_emis_format(p,v,a,n,s),
+            'ModelE': lambda p,v,a,n,s,c: self._load_format(p,v,a,n,s, self._read_ModelE, False),
+            'ModelE_Monthly': lambda p,v,a,n,s,c: self._load_format(p,v,a,n,s, self._read_ModelE, True),
+            'Combined_ModelE': lambda p,v,a,n,s,c: self._load_combined_ModelE(c, v, a, n, s),
+            'BA_GFED4': lambda p,v,a,n,s,c: self._load_gfed4sba_format(p,v,a,n,s, False),
+            'BA_GFED4_upscale': lambda p,v,a,n,s,c: self._load_gfed4sba_format(p,v,a,n,s, True),
+            'BA_GFED5': lambda p,v,a,n,s,c: self._load_gfed5ba_format(p,v,a,n,s, False),
+            'BA_GFED5_upscale': lambda p,v,a,n,s,c: self._load_gfed5ba_format(p,v,a,n,s, True),
+            'GFED4s_Monthly': lambda p,v,a,n,s,c: self._load_emis_format(p,v,a,n,s, True),
+            'GFED5_Monthly': lambda p,v,a,n,s,c: self._load_emis_format(p,v,a,n,s, True),
+            'FINN2.5_Monthly': lambda p,v,a,n,s,c: self._load_emis_format(p,v,a,n,s, True),
         }
     
     def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
-                         name: str = None, spatial_aggregation: str = None, annual: bool = False):
+                         name: str = None, spatial_aggregation: str = None, annual: bool = False,
+                         components: Optional[List[str]] = None):
         """Main entry point for loading data."""
         if file_type not in self._loaders:
             print(f"Unknown file type: {file_type}")
             return None
         try:
-            return self._loaders[file_type](folder_path, variables, annual, name, spatial_aggregation)
+            return self._loaders[file_type](folder_path, variables, annual, name, spatial_aggregation, components)
         except Exception as e:
             print(f"Error loading {file_type}: {e}")
             import traceback
             traceback.print_exc()
             return None
+
+    def _load_combined_ModelE(self, component_paths, variables, annual, name, spatial_aggregation):
+        """Custom loader for summing multiple ModelE formats."""
+        print("\n=== Reading COMBINED ModelE data ===")
+
+        combined_total_value = None
+        lon, lat = None, None
+
+        for path in component_paths:
+            print(f"  --> Loading component: {path}")
+            # The structure of ModelE_Monthly loader is a good reference
+            files = obtain_netcdf_files(path)
+            if not files:
+                print(f"    WARNING: No files found in {path}. Skipping.")
+                continue
+            files.sort()
+
+            # Use the existing ModelE reader
+            total_value, current_lon, current_lat = self._read_ModelE(files, variables, monthly=True, name=None)
+
+            if total_value is not None:
+                if combined_total_value is None:
+                    combined_total_value = total_value
+                    lon, lat = current_lon, current_lat
+                else:
+                    # Ensure the dimensions match before summing
+                    if combined_total_value.shape == total_value.shape:
+                        combined_total_value.values += total_value.values
+                    else:
+                        print(f"    ERROR: Component grid shapes do not match. Skipping {path}.")
+
+        if combined_total_value is None:
+            return None
+
+        # Final processing
+        return self._process_data(combined_total_value, lon, lat, annual, spatial_aggregation)
     
     def _load_format(self, folder_path, variables, annual, name, spatial_aggregation, reader_func, monthly):
         """Generic loader for ModelE formats."""

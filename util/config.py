@@ -27,6 +27,7 @@ class FolderConfig:
     variables: List[str]
     figure_data: FigureConfig
     spatial_aggregation: str = 'total'  # 'total' or 'mean' for spatial aggregation
+    components: Optional[List[str]] = None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'FolderConfig':
@@ -37,7 +38,8 @@ class FolderConfig:
             file_type=data['file_type'],
             variables=data['variables'],
             figure_data=figure_data,
-            spatial_aggregation=data.get('spatial_aggregation', 'total')  # Default to 'total'
+            spatial_aggregation=data.get('spatial_aggregation', 'total'),  # Default to 'total'
+            components=data.get('components',None)
         )
 
 

@@ -114,7 +114,8 @@ class TimeSeriesWorkflow:
                 file_type=folder_config.file_type,
                 variables=folder_config.variables,
                 annual=self.config.annual,
-                spatial_aggregation=folder_config.spatial_aggregation
+                spatial_aggregation=folder_config.spatial_aggregation,
+                components=folder_config.components
             )
             
             if data is not None:

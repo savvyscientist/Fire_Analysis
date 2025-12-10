@@ -11,40 +11,21 @@
     },
     "folders": [
       {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/AIJ",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
-        "figure_data": {
-          "color": "olive",
-          "marker": "o",
-          "line_style": "-",
-          "label": "Litter CC const",
-          "cbarmax": null 
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
-        "file_type": "ModelE_Monthly",
+        "folder_path": "NOT_USED",
+        "file_type": "Combined_ModelE",
         "variables": ["CO2n_emis"],
         "figure_data": {
           "color": "maroon",
           "marker": "o",
           "line_style": "-",
-          "label": "Foliage CC const",
+          "label": "Total ModelE (litter+foliage+CWD)",
           "cbarmax": null 
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_cwd/AIJ",
-        "file_type": "ModelE_Monthly",
-        "variables": ["CO2n_emis"],
-        "figure_data": {
-          "color": "purple",
-          "marker": "o",
-          "line_style": "-",
-          "label": "CWD CC const",
-          "cbarmax": null 
-        }
+        },
+        "components": [
+          "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
+          "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_cwd/AIJ",
+          "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/AIJ"
+        ]
       },
       {
         "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",

@@ -32,7 +32,8 @@ def diagnose():
             folder_path=folder_config.folder_path,
             file_type=folder_config.file_type,
             variables=folder_config.variables,
-            annual=time_config.annual
+            annual=time_config.annual,
+            components=folder_config.components
         )
         
         if data:
