@@ -431,13 +431,7 @@ class DataLoader:
             return None
         
         try:
-            units = total_value.attrs.get("units", "unknown")
-            original_units = units  # CRITICAL: Save original units for spatial data
-            
-            print(f"Processing data with units: {units}")
-            
             # Calculate spatial aggregation (mean or total)
-            # IMPORTANT: This happens BEFORE area integration, so data is still per-area
             if spatial_aggregation == 'total':
                 time_mean = total_value.sum(dim="time", skipna=True)
                 print(f"Using TOTAL over time for spatial maps")
@@ -445,10 +439,9 @@ class DataLoader:
                 time_mean = total_value.mean(dim="time", skipna=True)
                 print(f"Using MEAN over time for spatial maps")
             
-            # CRITICAL FIX: Preserve original per-area units in time_mean attributes
-            time_mean.attrs['units'] = original_units
-            print(f"Spatial data (time_mean) units: {original_units}")
+            units = total_value.attrs.get("units", "unknown")
             
+            print(f"Processing data with units: {units}")
             
             # Vectorized spatial sum
             sum_dims = (total_value.dims[-2], total_value.dims[-1])
@@ -477,8 +470,7 @@ class DataLoader:
                     
                     # Update units - remove the m-2 part
                     units = units.replace(' m-2', '').replace(' m^-2', '').replace('/m2', '').replace('/m^2', '')
-                    print(f"  Updated units (for time_series): '{units}'")
-                    print(f"  Spatial units (time_mean) remain: '{original_units}'")
+                    print(f"  Updated units: '{units}'")
                 else:
                     print("  WARNING: No grid_area_calculator - summing without area weights")
                     totals = total_value.sum(dim=sum_dims).values

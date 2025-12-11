@@ -1,9 +1,14 @@
 """
-Main workflow orchestrator for time series analysis.
-UPDATED: Supports target unit conversion and spatial aggregation settings
+Enhanced workflow with proper handling of per-area vs integrated units.
+
+Key concept:
+- Time series: Integrated totals (Tg CO2/month) - sum over all grid cells
+- Spatial maps: Flux density (kg CO2/m²/month) - per-area values
+
+This properly handles the physical meaning of the data.
 """
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import numpy as np
 
 from config import ConfigManager, TimeAnalysisConfig, FolderConfig
@@ -11,19 +16,20 @@ from data_loader import DataLoader, TimeSeriesData, save_time_series_data_to_net
 from analysis import TimeSeriesAnalyzer
 from visualization import TimeSeriesPlotter, SpatialPlotter, PlotStyle
 from grid_utils import GridAreaCalculator
-from unit_converter import UnitConverter, convert_to_target_units
+from unit_converter import UnitConverter, convert_to_target_units, parse_units
 
 
 class TimeSeriesWorkflow:
-    """Orchestrates complete time series analysis workflow."""
+    """
+    Orchestrates complete time series analysis workflow.
+    
+    Properly handles:
+    - Time series: Spatially integrated totals (e.g., Tg CO2/month)
+    - Spatial maps: Per-area flux (e.g., kg CO2/m²/month)
+    """
     
     def __init__(self, config: TimeAnalysisConfig):
-        """
-        Initialize workflow with configuration.
-        
-        Args:
-            config: TimeAnalysisConfig object
-        """
+        """Initialize workflow with configuration."""
         self.config = config
         
         # Initialize components
@@ -39,9 +45,6 @@ class TimeSeriesWorkflow:
         # Create output directory
         self.output_dir = Path(config.figs_folder)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Track final units for ylabel
-        self.final_units = None
     
     def run(self):
         """Execute complete workflow."""
@@ -49,7 +52,9 @@ class TimeSeriesWorkflow:
         print("Starting Time Series Analysis Workflow")
         print("=" * 60)
         
-        # Load all datasets
+        # Load all datasets in NATIVE units
+        # Time series will have INTEGRATED values (area already applied)
+        # Spatial maps (time_mean) will still be per-area if original data was per-area
         datasets = self._load_all_datasets()
         
         if not datasets:
@@ -57,9 +62,6 @@ class TimeSeriesWorkflow:
             return
         
         print(f"\nSuccessfully loaded {len(datasets)} datasets")
-        
-        # Determine final units from first dataset with target_units
-        self._determine_final_units(datasets)
         
         # Create visualizations
         self._create_time_series_plots(datasets)
@@ -74,23 +76,13 @@ class TimeSeriesWorkflow:
         print("Workflow completed successfully")
         print("=" * 60)
     
-    def _determine_final_units(self, datasets: List[tuple]):
-        """Determine the final units to use in ylabel."""
-        # Look for first dataset with target_units specified
-        for data, config in datasets:
-            if config.figure_data.target_units:
-                self.final_units = config.figure_data.target_units
-                print(f"\nUsing target units for ylabel: {self.final_units}")
-                break
-        
-        # If no target units, use the units from first dataset
-        if not self.final_units:
-            self.final_units = datasets[0][0].units
-            print(f"\nUsing data units for ylabel: {self.final_units}")
-    
     def _load_all_datasets(self) -> List[tuple]:
         """
-        Load all configured datasets with unit conversion.
+        Load all configured datasets.
+        
+        IMPORTANT: After loading:
+        - time_series: Already spatially integrated (NO m-2 in units)
+        - time_mean: Still PER-AREA if original data was per-area (HAS m-2 in units)
         
         Returns:
             List of (TimeSeriesData, FolderConfig) tuples
@@ -106,9 +98,6 @@ class TimeSeriesWorkflow:
             print(f"  Variables: {folder_config.variables}")
             print(f"  Spatial Aggregation: {folder_config.spatial_aggregation}")
             
-            if folder_config.figure_data.target_units:
-                print(f"  Target Units: {folder_config.figure_data.target_units}")
-            
             data = self.data_loader.load_time_series(
                 folder_path=folder_config.folder_path,
                 file_type=folder_config.file_type,
@@ -120,46 +109,26 @@ class TimeSeriesWorkflow:
             
             if data is not None:
                 print(f"  ✓ Data loaded successfully")
-                print(f"  Initial units: {data.units}")
+                print(f"  Time series units: {data.units}")
+                print(f"  Time series range: min={data.time_series[:, 1].min():.3e}, max={data.time_series[:, 1].max():.3e}")
                 
-                # Apply target unit conversion if specified
-                if folder_config.figure_data.target_units:
-                    print(f"  Converting to: {folder_config.figure_data.target_units}")
-                    
-                    # Convert time series values
-                    converted_values, new_units = convert_to_target_units(
-                        data.time_series[:, 1],
-                        data.units,
-                        folder_config.figure_data.target_units
-                    )
-                    data.time_series[:, 1] = converted_values
-                    
-                    # Convert spatial data
-                    converted_spatial, _ = convert_to_target_units(
-                        data.time_mean.values,
-                        data.units,
-                        folder_config.figure_data.target_units
-                    )
-                    data.time_mean.values = converted_spatial
-                    
-                    # Update units
-                    data.units = new_units
-                    print(f"  Final units: {data.units}")
-                # Prepare filename from configuration
+                # Determine spatial units from time_mean attributes
+                spatial_units = data.time_mean.attrs.get('units', data.units)
+                print(f"  Spatial data units: {spatial_units}")
+                
+                # Save both in NATIVE units
                 label = folder_config.figure_data.label.replace(' ', '_').replace('/', '_')
-                # Use the first variable name for the output file
                 variable = folder_config.variables[0] if folder_config.variables else 'data' 
-            
-                output_filename = f"{label}_{variable}_processed.nc"
+                output_filename = f"{label}_{variable}_native.nc"
                 output_filepath = self.output_dir / output_filename
-            
-                print(f"  Saving processed data to NetCDF: {output_filename}")
-             
-                # Call the new save function (must be defined in data_loader.py)
+                
+                print(f"  Saving data to NetCDF: {output_filename}")
                 save_time_series_data_to_netcdf(
                     data=data,
                     output_filepath=str(output_filepath),
-                    variable_name=variable) 
+                    variable_name=variable
+                )
+                
                 datasets.append((data, folder_config))
                 print(f"  ✓ Processing complete")
             else:
@@ -167,67 +136,193 @@ class TimeSeriesWorkflow:
         
         return datasets
     
-    def _create_time_series_plots(self, datasets: List[tuple]):
-        """Create time series plots."""
-        print("\n" + "-" * 60)
-        print("Creating time series plots...")
+    def _convert_for_time_series(
+        self, 
+        data: TimeSeriesData, 
+        config: FolderConfig
+    ) -> Tuple[np.ndarray, str]:
+        """
+        Convert time series data to target units for plotting.
         
-        # 1. Initialize Unit Converter and get the target unit from config
-        unit_converter = UnitConverter()
+        Time series should be INTEGRATED TOTALS (e.g., Tg CO2/month).
+        
+        Args:
+            data: TimeSeriesData object (time_series already integrated)
+            config: FolderConfig with target_units
+        
+        Returns:
+            Tuple of (converted_time_series, units_string)
+        """
+        target_units = config.figure_data.target_units
+        
+        # If no target specified, use native units
+        if not target_units:
+            return data.time_series, data.units
+        
+        # If target same as current, no conversion needed
+        if target_units == data.units:
+            return data.time_series, data.units
+        
+        try:
+            print(f"    Converting '{config.figure_data.label}' time series:")
+            print(f"      From: {data.units}")
+            print(f"      To:   {target_units}")
+            
+            # Convert values (should NOT have m-2 component)
+            if 'm-2' in data.units or 'm^-2' in data.units:
+                print(f"      ⚠️  WARNING: Time series still has per-area units!")
+                print(f"          This suggests area integration didn't happen in data_loader")
+            
+            converted_values, new_units = convert_to_target_units(
+                data.time_series[:, 1],
+                data.units,
+                target_units
+            )
+            
+            # Create new time series array with converted values
+            converted_ts = data.time_series.copy()
+            converted_ts[:, 1] = converted_values
+            
+            print(f"      Result: {new_units}")
+            print(f"      Range: min={converted_values.min():.3e}, max={converted_values.max():.3e}")
+            
+            return converted_ts, new_units
+            
+        except Exception as e:
+            print(f"    ❌ Conversion failed: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"    Using native units instead")
+            return data.time_series, data.units
     
-        time_config = self.config 
-        target_mass_unit = time_config.ylabel # "Tg CO2"
-
-        final_datasets_for_plotting = []
-
-        for data, plot_style in datasets:
-            # 'data' is a TimeSeriesData object, 'plot_style' is a FigureConfig object
+    def _prepare_spatial_for_maps(
+        self, 
+        data: TimeSeriesData, 
+        config: FolderConfig
+    ) -> Tuple[np.ndarray, str]:
+        """
+        Prepare spatial data for mapping with proper per-area units.
         
-            if data is None:
-                continue
-
-            current_units = data.units # e.g., 'kg CO2n month-1'
+        Maps should show FLUX DENSITY (e.g., kg CO2/m²/month).
         
-            # 1. Extract the time unit component (e.g., 'month-1')
-            time_unit_part = current_units.split()[-1] if ' ' in current_units else ""
+        Strategy:
+        1. If data.time_mean has original per-area units → just convert mass unit
+        2. If data.time_mean was integrated → divide by grid area to get per-area
         
-            # 2. Construct the full target unit (e.g., 'Tg CO2 month-1')
-            target_unit_full = f"{target_mass_unit} {time_unit_part}".strip()
-
-            if current_units != target_unit_full:
-                try:
-                    # Apply the conversion to the value column (index 1 of time_series)
-                    converted_values, new_units = unit_converter.convert(
-                        data_array=data.time_series[:, 1], 
-                        units=current_units,
-                        target_units=target_unit_full
-                    )
-                
-                    # Update the TimeSeriesData object in-place
-                    data.time_series[:, 1] = converted_values
-                    data.units = new_units
-                
-                except Exception as e:
-                    print(f"  ❌ FAILED conversion for '{plot_style.figure_data.label}': {e}")
-            else:
-                print(f"  - Skipping '{plot_style.label}': Units already match ({current_units})")
-
-            final_datasets_for_plotting.append((data, plot_style))
-
+        Args:
+            data: TimeSeriesData object
+            config: FolderConfig
+        
+        Returns:
+            Tuple of (spatial_data_per_area, units_string)
+        """
+        # Get the spatial data units from the xarray attrs
+        spatial_data = data.time_mean.values
+        
+        # Check if time_mean still has original per-area units
+        # (This would be the case if data_loader didn't integrate spatial for maps)
+        time_mean_units = data.time_mean.attrs.get('units', data.units)
+        
+        print(f"    Preparing spatial data for '{config.figure_data.label}':")
+        print(f"      Spatial data units: {time_mean_units}")
+        print(f"      Time series units: {data.units}")
+        
+        # Determine if spatial data is per-area or integrated
+        is_per_area = ('m-2' in time_mean_units or 'm^-2' in time_mean_units or 
+                      '/m2' in time_mean_units or '/m^2' in time_mean_units)
+        
+        if is_per_area:
+            # Data is already per-area - just convert mass prefix if needed
+            print(f"      Data is already per-area ✓")
+            
+            # Target for maps: "kg CO2/m²/month" or similar
+            # Convert just the mass component (e.g., kg → kg, or g → kg)
+            target_map_units = "kg CO2/m²/month"  # Standard for emissions maps
+            
+            try:
+                converted_spatial, new_units = convert_to_target_units(
+                    spatial_data,
+                    time_mean_units,
+                    target_map_units
+                )
+                print(f"      Converted to: {new_units}")
+                return converted_spatial, new_units
+            except Exception as e:
+                print(f"      ⚠️  Using original units: {time_mean_units}")
+                return spatial_data, time_mean_units
+        
+        else:
+            # Data was integrated - need to divide by grid area
+            print(f"      Data was integrated - converting back to per-area...")
+            
+            # Get grid area
+            grid_area = self.grid_calculator.calculate(
+                grid_area_shape=spatial_data.shape,
+                units='m^2'
+            )
+            
+            # Divide by area to get per-area flux
+            spatial_per_area = spatial_data / grid_area
+            
+            # Update units to include m-2
+            per_area_units = time_mean_units + "/m²"
+            print(f"      Per-area units: {per_area_units}")
+            
+            # Now convert mass prefix if needed
+            target_map_units = "kg CO2/m²/month"
+            
+            try:
+                converted_spatial, new_units = convert_to_target_units(
+                    spatial_per_area,
+                    per_area_units,
+                    target_map_units
+                )
+                print(f"      Final units: {new_units}")
+                return converted_spatial, new_units
+            except Exception as e:
+                print(f"      ⚠️  Using per-area without mass conversion: {per_area_units}")
+                return spatial_per_area, per_area_units
+    
+    def _create_time_series_plots(self, datasets: List[tuple]):
+        """Create time series plots with integrated totals."""
+        print("\n" + "-" * 60)
+        print("Creating time series plots (integrated totals)...")
+        
         plot_data = []
+        target_ylabel = None
+        
         for data, config in datasets:
+            # Convert time series to target units (e.g., Tg CO2/month)
+            converted_ts, converted_units = self._convert_for_time_series(data, config)
+            
+            # Track the first target units for ylabel
+            if target_ylabel is None and config.figure_data.target_units:
+                target_ylabel = config.figure_data.target_units
+            
             style = PlotStyle(
                 color=config.figure_data.color,
                 marker=config.figure_data.marker,
                 linestyle=config.figure_data.line_style,
                 label=config.figure_data.label
             )
-            plot_data.append((data, style))
+            
+            # Create a temporary data object with converted values
+            temp_data = TimeSeriesData(
+                time_mean=data.time_mean,
+                time_series=converted_ts,
+                longitude=data.longitude,
+                latitude=data.latitude,
+                units=converted_units,
+                start_year=data.start_year,
+                end_year=data.end_year
+            )
+            
+            plot_data.append((temp_data, style))
         
         save_path = self.output_dir / f"{self.config.title}_timeseries.png"
         
-        # Use final_units if determined, otherwise use config ylabel
-        ylabel = self.final_units if self.final_units else self.config.ylabel
+        # Use target ylabel if any dataset specified it, otherwise use config
+        ylabel = target_ylabel if target_ylabel else self.config.ylabel
         
         self.ts_plotter.plot_time_series(
             datasets=plot_data,
@@ -237,7 +332,7 @@ class TimeSeriesWorkflow:
             save_path=str(save_path)
         )
         
-        print(f"Time series plot saved to: {save_path}")
+        print(f"  ✓ Time series plot saved to: {save_path}")
     
     def _create_seasonal_plots(self, datasets: List[tuple]):
         """Create seasonal cycle plots."""
@@ -249,9 +344,18 @@ class TimeSeriesWorkflow:
         print("Creating seasonal cycle plots...")
         
         seasonal_data = []
+        target_ylabel = None
+        
         for data, config in datasets:
+            # Convert time series for seasonal analysis
+            converted_ts, converted_units = self._convert_for_time_series(data, config)
+            
+            if target_ylabel is None and config.figure_data.target_units:
+                target_ylabel = config.figure_data.target_units
+            
+            # Calculate seasonal stats on converted data
             stats = self.analyzer.calculate_seasonal_cycle(
-                data.time_series,
+                converted_ts,
                 annual=self.config.annual
             )
             
@@ -264,9 +368,7 @@ class TimeSeriesWorkflow:
             seasonal_data.append((stats, style))
         
         save_path = self.output_dir / f"{self.config.title}_seasonal.png"
-        
-        # Use final_units if determined
-        ylabel = self.final_units if self.final_units else self.config.ylabel
+        ylabel = target_ylabel if target_ylabel else self.config.ylabel
         
         self.ts_plotter.plot_seasonal_cycle(
             seasonal_data_list=seasonal_data,
@@ -275,7 +377,7 @@ class TimeSeriesWorkflow:
             save_path=str(save_path)
         )
         
-        print(f"Seasonal plot saved to: {save_path}")
+        print(f"  ✓ Seasonal plot saved to: {save_path}")
     
     def _create_annual_total_plots(self, datasets: List[tuple]):
         """Create annual total plots."""
@@ -283,8 +385,17 @@ class TimeSeriesWorkflow:
         print("Creating annual total plots...")
         
         annual_data = []
+        target_ylabel = None
+        
         for data, config in datasets:
-            totals = self.analyzer.calculate_annual_totals(data.time_series)
+            # Convert time series for annual analysis
+            converted_ts, converted_units = self._convert_for_time_series(data, config)
+            
+            if target_ylabel is None and config.figure_data.target_units:
+                target_ylabel = config.figure_data.target_units
+            
+            # Calculate annual totals on converted data
+            totals = self.analyzer.calculate_annual_totals(converted_ts)
             
             if totals is not None:
                 style = PlotStyle(
@@ -298,8 +409,7 @@ class TimeSeriesWorkflow:
         if annual_data:
             save_path = self.output_dir / f"{self.config.title}_annual.png"
             
-            # Use final_units if determined, but adjust for annual
-            ylabel = self.final_units if self.final_units else self.config.ylabel
+            ylabel = target_ylabel if target_ylabel else self.config.ylabel
             if ylabel and '/month' in ylabel:
                 ylabel = ylabel.replace('/month', '/yr')
             
@@ -310,83 +420,88 @@ class TimeSeriesWorkflow:
                 save_path=str(save_path)
             )
             
-            print(f"Annual totals plot saved to: {save_path}")
+            print(f"  ✓ Annual totals plot saved to: {save_path}")
         else:
-            print("No annual data to plot")
+            print("  No annual data to plot")
     
     def _create_spatial_maps(self, datasets: List[tuple]):
-        """Create spatial distribution maps."""
+        """Create spatial distribution maps with per-area flux."""
         print("\n" + "-" * 60)
-        print("Creating spatial maps...")
-        
-        map_datasets = []
-        for data, config in datasets:
-            map_datasets.append((
-                data.time_mean.values,
-                config.figure_data.label
-            ))
+        print("Creating spatial maps (per-area flux)...")
         
         # Use first dataset's coordinates
         lon = datasets[0][0].longitude
         lat = datasets[0][0].latitude
         
-        # Use final_units for colorbar label
-        cbar_label = self.final_units if self.final_units else datasets[0][0].units
-        
         # Create individual maps
         for i, (data, config) in enumerate(datasets):
+            # Prepare spatial data as per-area flux (e.g., kg CO2/m²/month)
+            spatial_per_area, spatial_units = self._prepare_spatial_for_maps(data, config)
+            
             save_path = self.output_dir / f"{self.config.title}_map_{i+1}.png"
             
+            print(f"    Plotting '{config.figure_data.label}'")
+            print(f"      Units: {spatial_units}")
+            print(f"      Range: min={spatial_per_area.min():.3e}, max={spatial_per_area.max():.3e}")
+            
             self.spatial_plotter.plot_spatial_map(
-                data=data.time_mean.values,
+                data=spatial_per_area,
                 lon=lon,
                 lat=lat,
                 title=f"{config.figure_data.label} - Mean {self.config.title}",
-                cbar_label=cbar_label,
+                cbar_label=spatial_units,
+                vmax=config.figure_data.cbarmax,  # Use config cbarmax if specified
                 save_path=str(save_path)
             )
         
         # Create multi-panel comparison
-        if len(map_datasets) > 1:
-            save_path = self.output_dir / f"{self.config.title}_comparison.png"
+        if len(datasets) > 1:
+            converted_datasets = []
+            common_units = None
+            units_match = True
             
-            self.spatial_plotter.create_multi_panel_map(
-                datasets=map_datasets,
-                lon=lon,
-                lat=lat,
-                overall_title=f"{self.config.title} Comparison",
-                cbar_label=cbar_label,
-                save_path=str(save_path)
-            )
+            for data, config in datasets:
+                spatial_per_area, spatial_units = self._prepare_spatial_for_maps(data, config)
+                converted_datasets.append((spatial_per_area, config.figure_data.label))
+                
+                if common_units is None:
+                    common_units = spatial_units
+                elif common_units != spatial_units:
+                    units_match = False
+                    print(f"  ⚠️  Warning: Units don't match for comparison map")
             
-            print(f"Comparison map saved to: {save_path}")
+            if units_match:
+                save_path = self.output_dir / f"{self.config.title}_comparison.png"
+                
+                self.spatial_plotter.create_multi_panel_map(
+                    datasets=converted_datasets,
+                    lon=lon,
+                    lat=lat,
+                    overall_title=f"{self.config.title} Comparison",
+                    cbar_label=common_units,
+                    save_path=str(save_path)
+                )
+                
+                print(f"  ✓ Comparison map saved to: {save_path}")
 
 
 class WorkflowRunner:
     """Main runner for all analysis workflows."""
     
     def __init__(self, config_file: str = "utilityEnvVar.json"):
-        """
-        Initialize workflow runner.
-        
-        Args:
-            config_file: Path to configuration file
-        """
         self.config_manager = ConfigManager(config_file)
     
     def run(self):
         """Execute all selected workflows."""
         print("\n" + "=" * 60)
-        print("WORKFLOW RUNNER")
+        print("WORKFLOW RUNNER - Proper Per-Area vs Integrated Units")
         print("=" * 60)
         
-        # Load configuration
         self.config_manager.load()
         scripts = self.config_manager.get_selected_scripts()
         
         print(f"\nSelected scripts: {scripts}")
         
-        # Run each script
         for script_name in scripts:
             self._run_script(script_name)
     
