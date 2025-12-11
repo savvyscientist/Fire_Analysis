@@ -15,7 +15,7 @@
         "file_type": "Combined_ModelE",
         "variables": ["CO2n_emis"],
         "figure_data": {
-          "color": "maroon",
+          "color": "blue",
           "marker": "o",
           "line_style": "-",
           "label": "Total ModelE (litter+foliage+CWD)",
@@ -28,18 +28,6 @@
         ]
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",
-        "file_type": "GFED4s_Monthly",
-        "variables": ["CO2n"],
-        "figure_data": {
-          "color": "red",
-          "marker": "o",
-          "line_style": "-",
-          "label": "GFED4s NAT",
-          "cbarmax": null 
-        }
-      },
-      {
         "folder_path": "/discover/nobackup/kmezuman/GFED5_emis",
         "file_type": "GFED5_Monthly",
         "variables": ["CO2n"],
@@ -48,6 +36,18 @@
           "marker": "o",
           "line_style": "-",
           "label": "GFED5 NAT",
+          "cbarmax": null 
+        }
+      },
+      {
+        "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",
+        "file_type": "GFED4s_Monthly",
+        "variables": ["CO2n"],
+        "figure_data": {
+          "color": "red",
+          "marker": "o",
+          "line_style": "-",
+          "label": "GFED4s NAT",
           "cbarmax": null 
         }
       },
