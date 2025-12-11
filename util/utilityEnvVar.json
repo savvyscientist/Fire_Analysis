@@ -19,6 +19,7 @@
           "marker": "o",
           "line_style": "-",
           "label": "Total ModelE (litter+foliage+CWD)",
+          "target_units": "Tg CO2",
           "cbarmax": null 
         },
         "components": [

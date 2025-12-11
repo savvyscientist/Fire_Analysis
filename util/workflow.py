@@ -197,9 +197,9 @@ class TimeSeriesWorkflow:
             if current_units != target_unit_full:
                 try:
                     # Apply the conversion to the value column (index 1 of time_series)
-                    converted_values, new_units = unit_converter.convert_to_target_units(
-                        data=data.time_series[:, 1], 
-                        current_units=current_units,
+                    converted_values, new_units = unit_converter.convert(
+                        data_array=data.time_series[:, 1], 
+                        units=current_units,
                         target_units=target_unit_full
                     )
                 
@@ -208,7 +208,7 @@ class TimeSeriesWorkflow:
                     data.units = new_units
                 
                 except Exception as e:
-                    print(f"  ❌ FAILED conversion for '{plot_style.label}': {e}")
+                    print(f"  ❌ FAILED conversion for '{plot_style.figure_data.label}': {e}")
             else:
                 print(f"  - Skipping '{plot_style.label}': Units already match ({current_units})")
 
