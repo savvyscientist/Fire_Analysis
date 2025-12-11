@@ -284,20 +284,48 @@ class TimeSeriesWorkflow:
                 return spatial_per_area, per_area_units
     
     def _create_time_series_plots(self, datasets: List[tuple]):
-        """Create time series plots with integrated totals."""
+        """Create time series plots with integrated totals - ALL datasets use common units."""
         print("\n" + "-" * 60)
         print("Creating time series plots (integrated totals)...")
         
+        # STEP 1: Determine common target units from ANY dataset that specifies it
+        common_target_units = None
+        for data, config in datasets:
+            if config.figure_data.target_units:
+                common_target_units = config.figure_data.target_units
+                print(f"  Using common target units for all datasets: {common_target_units}")
+                break
+        
+        # STEP 2: Convert ALL datasets to common units
         plot_data = []
-        target_ylabel = None
         
         for data, config in datasets:
-            # Convert time series to target units (e.g., Tg CO2/month)
-            converted_ts, converted_units = self._convert_for_time_series(data, config)
-            
-            # Track the first target units for ylabel
-            if target_ylabel is None and config.figure_data.target_units:
-                target_ylabel = config.figure_data.target_units
+            # Apply common target units to ALL datasets (not just the one that specified it)
+            if common_target_units:
+                print(f"    Converting '{config.figure_data.label}':")
+                print(f"      From: {data.units}")
+                print(f"      To:   {common_target_units}")
+                
+                try:
+                    converted_values, new_units = convert_to_target_units(
+                        data.time_series[:, 1],
+                        data.units,
+                        common_target_units
+                    )
+                    
+                    converted_ts = data.time_series.copy()
+                    converted_ts[:, 1] = converted_values
+                    converted_units = new_units
+                    
+                    print(f"      Result: min={converted_values.min():.3e}, max={converted_values.max():.3e}")
+                except Exception as e:
+                    print(f"      ⚠️  Conversion failed: {e}, using native units")
+                    converted_ts = data.time_series
+                    converted_units = data.units
+            else:
+                # No target units specified anywhere, use native
+                converted_ts = data.time_series
+                converted_units = data.units
             
             style = PlotStyle(
                 color=config.figure_data.color,
@@ -306,7 +334,7 @@ class TimeSeriesWorkflow:
                 label=config.figure_data.label
             )
             
-            # Create a temporary data object with converted values
+            # Create temporary data object with converted values
             temp_data = TimeSeriesData(
                 time_mean=data.time_mean,
                 time_series=converted_ts,
@@ -321,8 +349,8 @@ class TimeSeriesWorkflow:
         
         save_path = self.output_dir / f"{self.config.title}_timeseries.png"
         
-        # Use target ylabel if any dataset specified it, otherwise use config
-        ylabel = target_ylabel if target_ylabel else self.config.ylabel
+        # Use common_target_units for ylabel if available
+        ylabel = common_target_units if common_target_units else self.config.ylabel
         
         self.ts_plotter.plot_time_series(
             datasets=plot_data,
@@ -343,15 +371,30 @@ class TimeSeriesWorkflow:
         print("\n" + "-" * 60)
         print("Creating seasonal cycle plots...")
         
+        # Determine common target units
+        common_target_units = None
+        for data, config in datasets:
+            if config.figure_data.target_units:
+                common_target_units = config.figure_data.target_units
+                break
+        
         seasonal_data = []
-        target_ylabel = None
         
         for data, config in datasets:
-            # Convert time series for seasonal analysis
-            converted_ts, converted_units = self._convert_for_time_series(data, config)
-            
-            if target_ylabel is None and config.figure_data.target_units:
-                target_ylabel = config.figure_data.target_units
+            # Convert to common units if specified
+            if common_target_units:
+                try:
+                    converted_values, new_units = convert_to_target_units(
+                        data.time_series[:, 1],
+                        data.units,
+                        common_target_units
+                    )
+                    converted_ts = data.time_series.copy()
+                    converted_ts[:, 1] = converted_values
+                except:
+                    converted_ts = data.time_series
+            else:
+                converted_ts = data.time_series
             
             # Calculate seasonal stats on converted data
             stats = self.analyzer.calculate_seasonal_cycle(
@@ -368,7 +411,7 @@ class TimeSeriesWorkflow:
             seasonal_data.append((stats, style))
         
         save_path = self.output_dir / f"{self.config.title}_seasonal.png"
-        ylabel = target_ylabel if target_ylabel else self.config.ylabel
+        ylabel = common_target_units if common_target_units else self.config.ylabel
         
         self.ts_plotter.plot_seasonal_cycle(
             seasonal_data_list=seasonal_data,
@@ -384,15 +427,30 @@ class TimeSeriesWorkflow:
         print("\n" + "-" * 60)
         print("Creating annual total plots...")
         
+        # Determine common target units
+        common_target_units = None
+        for data, config in datasets:
+            if config.figure_data.target_units:
+                common_target_units = config.figure_data.target_units
+                break
+        
         annual_data = []
-        target_ylabel = None
         
         for data, config in datasets:
-            # Convert time series for annual analysis
-            converted_ts, converted_units = self._convert_for_time_series(data, config)
-            
-            if target_ylabel is None and config.figure_data.target_units:
-                target_ylabel = config.figure_data.target_units
+            # Convert to common units if specified
+            if common_target_units:
+                try:
+                    converted_values, new_units = convert_to_target_units(
+                        data.time_series[:, 1],
+                        data.units,
+                        common_target_units
+                    )
+                    converted_ts = data.time_series.copy()
+                    converted_ts[:, 1] = converted_values
+                except:
+                    converted_ts = data.time_series
+            else:
+                converted_ts = data.time_series
             
             # Calculate annual totals on converted data
             totals = self.analyzer.calculate_annual_totals(converted_ts)
@@ -409,7 +467,7 @@ class TimeSeriesWorkflow:
         if annual_data:
             save_path = self.output_dir / f"{self.config.title}_annual.png"
             
-            ylabel = target_ylabel if target_ylabel else self.config.ylabel
+            ylabel = common_target_units if common_target_units else self.config.ylabel
             if ylabel and '/month' in ylabel:
                 ylabel = ylabel.replace('/month', '/yr')
             

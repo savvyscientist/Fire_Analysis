@@ -5,7 +5,7 @@
     "time_analysis_figure_data": {
       "annual": false,
       "title": "CO2_Emissions",
-      "ylabel": "Tg CO2",
+      "ylabel": "Pg CO2",
       "logmapscale": false,
       "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_CO2"
     },
@@ -19,8 +19,8 @@
           "marker": "o",
           "line_style": "-",
           "label": "Total ModelE (litter+foliage+CWD)",
-          "target_units": "Tg CO2",
-          "cbarmax": null 
+          "target_units": "Pg CO2",
+          "cbarmax": 0.1
         },
         "components": [
           "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
@@ -37,7 +37,7 @@
           "marker": "o",
           "line_style": "-",
           "label": "GFED5 NAT",
-          "cbarmax": null 
+          "cbarmax": 0.1
         }
       },
       {
@@ -49,7 +49,7 @@
           "marker": "o",
           "line_style": "-",
           "label": "GFED4s NAT",
-          "cbarmax": null 
+          "cbarmax": 0.1
         }
       },
       {
@@ -61,7 +61,7 @@
           "marker": "o",
           "line_style": ":",
           "label": "FINN2012 ALL",
-          "cbarmax": null 
+          "cbarmax": 0.1
         }
       }
     ]
