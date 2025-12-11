@@ -172,6 +172,48 @@ class TimeSeriesWorkflow:
         print("\n" + "-" * 60)
         print("Creating time series plots...")
         
+        # 1. Initialize Unit Converter and get the target unit from config
+        unit_converter = UnitConverter()
+    
+        time_config = self.config 
+        target_mass_unit = time_config.ylabel # "Tg CO2"
+
+        final_datasets_for_plotting = []
+
+        for data, plot_style in datasets:
+            # 'data' is a TimeSeriesData object, 'plot_style' is a FigureConfig object
+        
+            if data is None:
+                continue
+
+            current_units = data.units # e.g., 'kg CO2n month-1'
+        
+            # 1. Extract the time unit component (e.g., 'month-1')
+            time_unit_part = current_units.split()[-1] if ' ' in current_units else ""
+        
+            # 2. Construct the full target unit (e.g., 'Tg CO2 month-1')
+            target_unit_full = f"{target_mass_unit} {time_unit_part}".strip()
+
+            if current_units != target_unit_full:
+                try:
+                    # Apply the conversion to the value column (index 1 of time_series)
+                    converted_values, new_units = unit_converter.convert_to_target_units(
+                        data=data.time_series[:, 1], 
+                        current_units=current_units,
+                        target_units=target_unit_full
+                    )
+                
+                    # Update the TimeSeriesData object in-place
+                    data.time_series[:, 1] = converted_values
+                    data.units = new_units
+                
+                except Exception as e:
+                    print(f"  ❌ FAILED conversion for '{plot_style.label}': {e}")
+            else:
+                print(f"  - Skipping '{plot_style.label}': Units already match ({current_units})")
+
+            final_datasets_for_plotting.append((data, plot_style))
+
         plot_data = []
         for data, config in datasets:
             style = PlotStyle(
