@@ -85,7 +85,8 @@ class DataLoader:
     
     def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
                          name: str = None, spatial_aggregation: str = None, annual: bool = False,
-                         components: Optional[List[str]] = None):
+                         components: Optional[List[str]] = None,
+                         spatial_aggregation: str = 'total') -> Optional[TimeSeriesData]:
         """Main entry point for loading data."""
         if file_type not in self._loaders:
             print(f"Unknown file type: {file_type}")
