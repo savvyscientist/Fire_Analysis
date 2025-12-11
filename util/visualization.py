@@ -311,7 +311,7 @@ class SpatialPlotter:
     
     def create_multi_panel_map(
         self,
-        datasets: List[Tuple[np.ndarray, str]],
+        datasets: List[Tuple[np.ndarray, str, Optional[float]]],  # Now includes vmax
         lon: np.ndarray,
         lat: np.ndarray,
         overall_title: str = '',
@@ -323,7 +323,7 @@ class SpatialPlotter:
         Create multi-panel spatial map.
         
         Args:
-            datasets: List of (data, title) tuples
+            datasets: List of (data, title, vmax) tuples - vmax can be None for auto-scaling
             lon: Longitude array
             lat: Latitude array
             overall_title: Overall figure title
@@ -340,7 +340,14 @@ class SpatialPlotter:
         
         fig = plt.figure(figsize=(6 * n_cols, 5 * n_rows))
         
-        for idx, (data, title) in enumerate(datasets):
+        for idx, dataset_tuple in enumerate(datasets):
+            # Handle both (data, title) and (data, title, vmax) formats
+            if len(dataset_tuple) == 3:
+                data, title, vmax = dataset_tuple
+            else:
+                data, title = dataset_tuple
+                vmax = None
+            
             ax = fig.add_subplot(
                 n_rows, n_cols, idx + 1,
                 projection=ccrs.PlateCarree()
@@ -353,6 +360,8 @@ class SpatialPlotter:
                 lon, lat, data,
                 transform=ccrs.PlateCarree(),
                 cmap=cmap,
+                vmin=0,  # Always start at 0 for emissions
+                vmax=vmax,  # Use config vmax if provided, else auto-scale
                 shading='auto'
             )
             

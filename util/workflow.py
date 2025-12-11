@@ -521,7 +521,9 @@ class TimeSeriesWorkflow:
             
             for data, config in datasets:
                 spatial_per_area, spatial_units = self._prepare_spatial_for_maps(data, config)
-                converted_datasets.append((spatial_per_area, config.figure_data.label))
+                # Include cbarmax from config (can be None for auto-scaling)
+                cbarmax = config.figure_data.cbarmax if hasattr(config.figure_data, 'cbarmax') else None
+                converted_datasets.append((spatial_per_area, config.figure_data.label, cbarmax))
                 
                 if common_units is None:
                     common_units = spatial_units
