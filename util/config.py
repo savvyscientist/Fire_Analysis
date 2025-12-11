@@ -26,7 +26,8 @@ class FolderConfig:
     file_type: str
     variables: List[str]
     figure_data: FigureConfig
-    spatial_aggregation: str = 'total'  # 'total' or 'mean' for spatial aggregation
+    spatial_aggregation: str = 'total'  # For time series: 'total' (sum) or 'mean' over SPACE
+    temporal_aggregation_map: str = 'annual_mean'  # For maps: 'annual_mean', 'period_mean', 'period_sum'
     components: Optional[List[str]] = None
     
     @classmethod
@@ -38,7 +39,8 @@ class FolderConfig:
             file_type=data['file_type'],
             variables=data['variables'],
             figure_data=figure_data,
-            spatial_aggregation=data.get('spatial_aggregation', 'total'),  # Default to 'total'
+            spatial_aggregation=data.get('spatial_aggregation', 'total'),
+            temporal_aggregation_map=data.get('temporal_aggregation_map', 'annual_mean'),
             components=data.get('components',None)
         )
 

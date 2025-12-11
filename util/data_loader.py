@@ -71,35 +71,45 @@ class DataLoader:
     def __init__(self, grid_area_calculator=None):
         self.grid_area_calculator = grid_area_calculator
         self._loaders = {
-            'ModelE': lambda p,v,a,n,s,c=None: self._load_format(p,v,a,n,s, self._read_ModelE, False),
-            'ModelE_Monthly': lambda p,v,a,n,s,c=None: self._load_format(p,v,a,n,s, self._read_ModelE, True),
-            'Combined_ModelE': lambda p,v,a,n,s,c: self._load_combined_ModelE(c, v, a, n, s),
-            'BA_GFED4': lambda p,v,a,n,s,c=None: self._load_gfed4sba_format(p,v,a,n,s, False),
-            'BA_GFED4_upscale': lambda p,v,a,n,s,c=None: self._load_gfed4sba_format(p,v,a,n,s, True),
-            'BA_GFED5': lambda p,v,a,n,s,c=None: self._load_gfed5ba_format(p,v,a,n,s, False),
-            'BA_GFED5_upscale': lambda p,v,a,n,s,c=None: self._load_gfed5ba_format(p,v,a,n,s, True),
-            'GFED4s_Monthly': lambda p,v,a,n,s,c=None: self._load_emis_format(p,v,n,s, True),
-            'GFED5_Monthly': lambda p,v,a,n,s,c=None: self._load_emis_format(p,v,n,s, True),
-            'FINN2.5_Monthly': lambda p,v,a,n,s,c=None: self._load_emis_format(p,v,n,s, True),
+            'ModelE': lambda p,v,a,n,s,t,c=None: self._load_format(p,v,a,n,s,t, self._read_ModelE, False),
+            'ModelE_Monthly': lambda p,v,a,n,s,t,c=None: self._load_format(p,v,a,n,s,t, self._read_ModelE, True),
+            'Combined_ModelE': lambda p,v,a,n,s,t,c: self._load_combined_ModelE(c, v, a, n, s, t),
+            'BA_GFED4': lambda p,v,a,n,s,t,c=None: self._load_gfed4sba_format(p,v,a,n,s,t, False),
+            'BA_GFED4_upscale': lambda p,v,a,n,s,t,c=None: self._load_gfed4sba_format(p,v,a,n,s,t, True),
+            'BA_GFED5': lambda p,v,a,n,s,t,c=None: self._load_gfed5ba_format(p,v,a,n,s,t, False),
+            'BA_GFED5_upscale': lambda p,v,a,n,s,t,c=None: self._load_gfed5ba_format(p,v,a,n,s,t, True),
+            'GFED4s_Monthly': lambda p,v,a,n,s,t,c=None: self._load_emis_format(p,v,n,s,t, True),
+            'GFED5_Monthly': lambda p,v,a,n,s,t,c=None: self._load_emis_format(p,v,n,s,t, True),
+            'FINN2.5_Monthly': lambda p,v,a,n,s,t,c=None: self._load_emis_format(p,v,n,s,t, True),
         }
     
     def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
                          name: str = None, annual: bool = False,
                          components: Optional[List[str]] = None,
-                         spatial_aggregation: str = 'total') -> Optional[TimeSeriesData]:
-        """Main entry point for loading data."""
+                         spatial_aggregation: str = 'total',
+                         temporal_aggregation_map: str = 'annual_mean') -> Optional[TimeSeriesData]:
+        """
+        Main entry point for loading data.
+        
+        Args:
+            spatial_aggregation: For time series - 'total' (sum) or 'mean' over SPACE
+            temporal_aggregation_map: For spatial maps - how to aggregate over TIME:
+                'annual_mean': Mean of annual totals (emissions - sum 12 months, then average years)
+                'period_mean': Mean over entire period (flammability, temperature)
+                'period_sum': Sum over entire period (rare - cumulative)
+        """
         if file_type not in self._loaders:
             print(f"Unknown file type: {file_type}")
             return None
         try:
-            return self._loaders[file_type](folder_path, variables, annual, name, spatial_aggregation, components)
+            return self._loaders[file_type](folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map, components)
         except Exception as e:
             print(f"Error loading {file_type}: {e}")
             import traceback
             traceback.print_exc()
             return None
 
-    def _load_combined_ModelE(self, component_paths, variables, annual, name, spatial_aggregation):
+    def _load_combined_ModelE(self, component_paths, variables, annual, name, spatial_aggregation, temporal_aggregation_map):
         """Custom loader for summing multiple ModelE formats."""
         print("\n=== Reading COMBINED ModelE data ===")
 
@@ -133,43 +143,43 @@ class DataLoader:
             return None
 
         # Final processing
-        return self._process_data(combined_total_value, lon, lat, annual, spatial_aggregation)
+        return self._process_data(combined_total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
     
-    def _load_format(self, folder_path, variables, annual, name, spatial_aggregation, reader_func, monthly):
+    def _load_format(self, folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map, reader_func, monthly):
         """Generic loader for ModelE formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = reader_func(files, variables, monthly, name)
-        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
     
-    def _load_gfed4sba_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
+    def _load_gfed4sba_format(self, folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map, upscaled):
         """Loader for GFED4s formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = self._read_gfed4sba(files, upscaled)
-        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
 
-    def _load_gfed5ba_format(self, folder_path, variables, annual, name, spatial_aggregation, upscaled):
+    def _load_gfed5ba_format(self, folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map, upscaled):
         """Loader for GFED5 formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = self._read_gfed5ba(files, variables, upscaled)
-        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
     
-    def _load_emis_format(self, folder_path, variables, annual, name, spatial_aggregation):
+    def _load_emis_format(self, folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map):
         """Loader for emissions formats."""
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
         total_value, lon, lat = self._read_modelEinput_emis(files, variables)
-        return self._process_data(total_value, lon, lat, annual, spatial_aggregation)
+        return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
     
     def _read_ModelE(self, files, variables, monthly=False, name=None):
         """Read ModelE NetCDF files - WITH PROPER UNIT CONVERSION."""
@@ -425,27 +435,76 @@ class DataLoader:
                            coords={'time':time_vals, 'lat':lat, 'lon':lon},
                            attrs=attrs), lon, lat
     
-    def _process_data(self, total_value, lon, lat, annual, spatial_aggregation='mean'):
-        """Process loaded data into TimeSeriesData - FIXED UNIT HANDLING."""
+    def _process_data(self, total_value, lon, lat, annual, spatial_aggregation='total', temporal_aggregation_map='annual_mean'):
+        """
+        Process loaded data into TimeSeriesData with smart temporal aggregation.
+        
+        Args:
+            spatial_aggregation: For time series - 'total' or 'mean' over SPACE
+            temporal_aggregation_map: For spatial maps - how to aggregate over TIME:
+                'annual_mean': Mean of annual totals (for emissions)
+                'period_mean': Mean over entire period (for flammability, temperature)
+                'period_sum': Sum over entire period (rare - cumulative)
+        """
         if total_value is None:
             return None
         
         try:
             units = total_value.attrs.get("units", "unknown")
-            original_units = units  # CRITICAL: Save original units for spatial data
+            original_units = units  # Save original units for spatial data
             
             print(f"Processing data with units: {units}")
             
-            # Calculate spatial aggregation (mean or total)
-            # IMPORTANT: This happens BEFORE area integration, so data is still per-area
-            if spatial_aggregation == 'total':
+            # SPATIAL MAPS: Smart temporal aggregation
+            if temporal_aggregation_map == 'annual_mean':
+                # For emissions: mean of annual totals (sum 12 months per year, then average)
+                print(f"Spatial maps: ANNUAL_MEAN (mean of yearly totals)")
+                
+                # Get time dimension
+                times = total_value['time'].values
+                n_times = len(times)
+                
+                # Determine if monthly data (assume 12 months/year)
+                if n_times >= 12:
+                    # Reshape into years (assumes complete years)
+                    n_years = n_times // 12
+                    n_complete_months = n_years * 12
+                    
+                    # Trim to complete years
+                    complete_data = total_value.isel(time=slice(0, n_complete_months))
+                    
+                    # Reshape: (n_years, 12, lat, lon)
+                    reshaped = complete_data.values.reshape(n_years, 12, *complete_data.shape[1:])
+                    
+                    # Sum over months (axis=1) to get annual totals, then mean over years (axis=0)
+                    annual_totals = reshaped.sum(axis=1)  # (n_years, lat, lon)
+                    time_mean_values = annual_totals.mean(axis=0)  # (lat, lon)
+                    
+                    print(f"  Calculated mean of {n_years} annual totals ({n_complete_months} months)")
+                else:
+                    # Less than 12 months - just use simple mean
+                    time_mean_values = total_value.mean(dim="time", skipna=True).values
+                    print(f"  Less than 12 months - using simple mean")
+                
+                # Create DataArray with proper coordinates
+                time_mean = type(total_value)(
+                    time_mean_values,
+                    dims=total_value.dims[1:],  # Remove time dimension
+                    coords={k: v for k, v in total_value.coords.items() if k != 'time'},
+                    attrs=total_value.attrs
+                )
+                
+            elif temporal_aggregation_map == 'period_sum':
+                # Sum over entire period (rare - for cumulative quantities)
                 time_mean = total_value.sum(dim="time", skipna=True)
-                print(f"Using TOTAL over time for spatial maps")
-            else:  # default to mean
+                print(f"Spatial maps: PERIOD_SUM (cumulative total)")
+                
+            else:  # 'period_mean' (default)
+                # Mean over entire period (for intensive quantities)
                 time_mean = total_value.mean(dim="time", skipna=True)
-                print(f"Using MEAN over time for spatial maps")
+                print(f"Spatial maps: PERIOD_MEAN (time-averaged)")
             
-            # CRITICAL FIX: Preserve original per-area units in time_mean attributes
+            # Preserve original per-area units in time_mean
             time_mean.attrs['units'] = original_units
             print(f"Spatial data (time_mean) units: {original_units}")
             

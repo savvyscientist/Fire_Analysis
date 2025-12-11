@@ -104,6 +104,7 @@ class TimeSeriesWorkflow:
                 variables=folder_config.variables,
                 annual=self.config.annual,
                 spatial_aggregation=folder_config.spatial_aggregation,
+                temporal_aggregation_map=folder_config.temporal_aggregation_map,
                 components=folder_config.components
             )
             
