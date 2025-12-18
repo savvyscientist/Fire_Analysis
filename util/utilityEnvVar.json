@@ -1,75 +1,43 @@
 {
   "selected_script": ["time_analysis_version_two"],
   "time_analysis_version_two": {
-    "save_netcdf": true,  
+    "save_netcdf": true,
     "time_analysis_figure_data": {
       "annual": false,
-      "title": "CO2_Emissions",
-      "ylabel": "Pg CO2",
+      "title": "Burned_Area",
+      "ylabel": "Mha",
       "logmapscale": false,
-      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_CO2"
+      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_BA"
     },
     "folders": [
       {
-        "folder_path": "NOT_USED",
-        "file_type": "Combined_ModelE",
-        "variables": ["CO2n_emis"],
+        "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
+        "file_type": "ModelE_monthly",
+        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
         "spatial_aggregation": "total",
         "temporal_aggregation_map": "annual_mean",
         "figure_data": {
           "color": "blue",
           "marker": "o",
           "line_style": "-",
-          "label": "Total ModelE (litter+foliage+CWD)",
-          "target_units": "Pg CO2",
-          "cbarmax": 0.1
+          "label": "ModelE BA",
+          "target_units": "Mha",
+          "cbarmax": 0.5
         },
-        "components": [
-          "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
-          "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_cwd/AIJ",
-          "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_litter/AIJ"
-        ]
       },
       {
-        "folder_path": "/discover/nobackup/kmezuman/GFED5_emis",
-        "file_type": "GFED5_Monthly",
-        "variables": ["CO2n"],
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale/analysis",
+        "file_type": "BA_GFED5",
+        "variables": ["Nat"],
         "spatial_aggregation": "total",
         "temporal_aggregation_map": "annual_mean",
         "figure_data": {
           "color": "black",
           "marker": "o",
           "line_style": "-",
-          "label": "GFED5 NAT",
-          "cbarmax": 0.1
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/GFED4s_emis",
-        "file_type": "GFED4s_Monthly",
-        "variables": ["CO2n"],
-        "spatial_aggregation": "total",
-        "temporal_aggregation_map": "annual_mean",
-        "figure_data": {
-          "color": "red",
-          "marker": "o",
-          "line_style": "-",
-          "label": "GFED4s NAT",
-          "cbarmax": 0.1
-        }
-      },
-      {
-        "folder_path": "/discover/nobackup/kmezuman/FINN2.5modisviirs_emis",
-        "file_type": "FINN2.5_Monthly",
-        "variables": ["CO2n"],
-        "spatial_aggregation": "total",
-        "temporal_aggregation_map": "annual_mean",
-        "figure_data": {
-          "color": "green",
-          "marker": "o",
-          "line_style": ":",
-          "label": "FINN2012 ALL",
-          "cbarmax": 0.1
+          "label": "GFED5 NAT BA",
+          "target_units": "Mha",
+          "cbarmax": 0.5
         }
       }
     ]
