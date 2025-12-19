@@ -180,222 +180,117 @@ class DataLoader:
         files.sort()
         total_value, lon, lat = self._read_modelEinput_emis(files, variables)
         return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
-    
+
     def _read_ModelE(self, files, variables, monthly=False, name=None):
-        """Read ModelE NetCDF files - WITH PROPER UNIT CONVERSION."""
-        print(f"\n=== Reading ModelE data ===")
-        print(f"Number of files: {len(files)}")
-        print(f"Monthly: {monthly}")
-        print(f"Variables: {variables}")
-        
-        # Pre-allocate arrays for speed
+        """Read ModelE - Logic: Ensure fractions are integrated by setting units to m^2/m^2."""
         first_ds = xr.open_dataset(files[0])
-        longitude, latitude = first_ds['lon'].values, first_ds['lat'].values
-        lat_size, lon_size = len(latitude), len(longitude)
+        lat, lon = first_ds['lat'].values, first_ds['lon'].values
         
-        n_files = len(files)
-        time_values = np.zeros(n_files, dtype=np.float64)
+        # Identify unit scaling from the first variable
+        sample_var = variables[0]
+        original_units = first_ds[sample_var].attrs.get('units', '1')
+        scaling_factor, clean_units = extract_scaling_factor(original_units)
         
-        # Get attributes and units from first file
-        scaling_factor = 1.0
-        attribute_dict = {}
-        original_units = ''
-        for var in variables:
-            if var in first_ds.variables:
-                attribute_dict = dict(first_ds[var].attrs)
-                original_units = attribute_dict.get('units', '')
-                scaling_factor, clean_units = extract_scaling_factor(original_units)
-                attribute_dict['units'] = clean_units
-                print(f"Original units: {original_units}")
-                print(f"Scaling factor: {scaling_factor}")
-                print(f"Clean units: {clean_units}")
-                print(f"DEBUG - Scaling factor type: {type(scaling_factor)}")
-                if scaling_factor == 0:
-                    print("❌ WARNING: Scaling factor is ZERO! This will zero out all data!")
-                elif scaling_factor < 1e-100:
-                    print(f"⚠️  WARNING: Scaling factor is very small: {scaling_factor:.2e}")
-                break
+        # CRITICAL LOGIC: If this is a BA fraction (unitless), 
+        # set units to 'm^2/m^2' so the workflow knows to multiply by Grid Area.
+        is_ba = any(x in sample_var.lower() for x in ['ba', 'burn'])
+        if is_ba and clean_units in ['1', 'fraction', 'none']:
+            clean_units = "m^2/m^2"
+            
         first_ds.close()
         
-        # Will store converted data (with time scaling applied)
-        converted_data_list = []
-        
-        # Process files - apply ALL conversions INCLUDING time scaling
-        for idx, fpath in enumerate(files):
-            try:
-                ds = xr.open_dataset(fpath, decode_times=False)
-                
-                # Sum variables - PROPERLY HANDLE FILL VALUES
-                data = np.zeros((lat_size, lon_size), dtype=np.float32)
-                for var in variables:
-                    if var in ds.variables:
-                        # Get the DataArray (not just values) to preserve metadata
-                        var_da = ds[var]
-                        
-                        # Check for fill value in attributes
-                        fill_value = var_da.attrs.get('_FillValue', None)
-                        if fill_value is None:
-                            fill_value = var_da.attrs.get('missing_value', -1e30)
-                        
-                        # Get values
-                        var_data = var_da.values.copy()
-                        
-                        # Replace fill values with 0 (for burned area, missing = no burning)
-                        if fill_value is not None:
-                            var_data[var_data == fill_value] = 0.0
-                        
-                        # Also replace any NaN with 0
-                        var_data = np.nan_to_num(var_data, nan=0.0, posinf=0.0, neginf=0.0)
-                        
-                        # Set negative values to 0 (burned area can't be negative)
-                        np.maximum(var_data, 0.0, out=var_data)
-                        
-                        if idx == 0:
-                            print(f"\n  Variable '{var}':")
-                            print(f"    Fill value: {fill_value}")
-                            print(f"    After cleanup - min: {np.min(var_data):.6e}, max: {np.max(var_data):.6e}")
-                            print(f"    Non-zero count: {np.count_nonzero(var_data)}/{var_data.size}")
-                        
-                        data += var_data
-                
-                # Apply scaling factor
-                if idx == 0:
-                    print(f"\nDEBUG - Before scaling:")
-                    print(f"  Data min: {np.min(data):.6e}, max: {np.max(data):.6e}, mean: {np.mean(data):.6e}")
-                    print(f"  Sample values: {data[45, 72]:.6e}, {data[0, 0]:.6e}, {data[89, 143]:.6e}")
-                
-                data = data * scaling_factor
-                
-                if idx == 0:
-                    print(f"DEBUG - After scaling (factor={scaling_factor}):")
-                    print(f"  Data min: {np.min(data):.6e}, max: {np.max(data):.6e}, mean: {np.mean(data):.6e}")
-                    print(f"  Sample values: {data[45, 72]:.6e}, {data[0, 0]:.6e}, {data[89, 143]:.6e}")
-                
-                # Extract year and month FIRST
-                if monthly:
-                    year = int(fpath.split(".")[0][-4:])
-                    month = fpath.split(".")[0][-7:-4]
-                    month_num = MONTHLIST.index(month) + 1
-                    time_values[idx] = year + (month_num - 1) / 12.0
-                else:
-                    year = int(fpath.split("ANN")[1][:4]) if "ANN" in fpath else 2009 + idx
-                    time_values[idx] = year
-                
-                # CRITICAL: Apply time scaling BEFORE spatial sum (like original code)
-                if 's-1' in original_units or '/s' in original_units:
-                    if monthly:
-                        # Calculate seconds in this specific month
-                        days_in_month = days_to_months(str(month_num).zfill(2), year)
-                        seconds_in_month = days_in_month * DAYS_TO_SECONDS
-                        
-                        # Convert from /s to /month
-                        data = data * seconds_in_month
-                        
-                        if idx == 0:
-                            print(f"\nTime conversion applied:")
-                            print(f"  Month: {month} ({month_num})")
-                            print(f"  Days in month: {days_in_month}")
-                            print(f"  Seconds in month: {seconds_in_month:.2e}")
-                            print(f"  Sample value before: {data[45, 72]:.6e}")
-                    else:
-                        # Convert from /s to /year
-                        data = data * SECONDS_IN_A_YEAR
-                        if idx == 0:
-                            print(f"\nAnnual time conversion: multiplying by {SECONDS_IN_A_YEAR:.2e}")
-                
-                if idx == 0:
-                    print(f"  Sample value after time conversion: {data[45, 72]:.6e}")
-                    print(f"  Data min: {np.min(data):.6e}, max: {np.max(data):.6e}")
-                
-                converted_data_list.append(data)
-                ds.close()
-                
-            except Exception as e:
-                print(f"Error processing {fpath}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-        
-        # Stack all converted data
-        all_data = np.array(converted_data_list)
-        
-        print(f"\nFinal data shape: {all_data.shape}")
-        print(f"Time values: {time_values[:3]}... (showing first 3)")
-        
-        # Update units to reflect time conversion
-        if 's-1' in original_units or '/s' in original_units:
+        all_data = []
+        time_values = []
+
+        for fpath in files:
+            ds = xr.open_dataset(fpath, decode_times=False)
+            # Combine requested variables (e.g., BA_tree + BA_shrub)
+            combined = sum(ds[v].values for v in variables if v in ds.variables)
+            
+            # Clean up fill values/NaNs
+            combined = np.nan_to_num(combined, nan=0.0)
+            combined[combined < 0] = 0.0
+            
+            # Apply base scaling (e.g., from 10^-6 to 1)
+            combined *= scaling_factor
+            
+            # Handle Time scaling (per second to per month/year)
+            fname = os.path.basename(fpath)
             if monthly:
-                attribute_dict['units'] = attribute_dict['units'].replace('/s', '/month').replace('s-1', 'month-1')
+                month_str = fname.split('.')[0][-7:-4].upper() # e.g., 'JAN'
+                year = int(fname.split('.')[0][-4:])
+                month_idx = MONTHLIST.index(month_str) + 1
+                if 's-1' in original_units or '/s' in original_units:
+                    days = days_to_months(str(month_idx).zfill(2), year)
+                    combined *= (days * 24 * 3600)
+                time_values.append(year + (month_idx - 1) / 12.0)
             else:
-                attribute_dict['units'] = attribute_dict['units'].replace('/s', '/yr').replace('s-1', 'yr-1')
-        
-        print(f"Final units: {attribute_dict['units']}")
-        
+                if 's-1' in original_units or '/s' in original_units:
+                    combined *= SECONDS_IN_A_YEAR
+                time_values.append(int(re.search(r'\d{4}', fname).group()))
+
+            all_data.append(combined)
+            ds.close()
+
         return xr.DataArray(
-            all_data, 
-            dims=['time','lat','lon'],
-            coords={'time':time_values, 'lat':latitude, 'lon':longitude},
-            attrs=attribute_dict
-        ), longitude, latitude
-    
+            np.array(all_data),
+            dims=['time', 'lat', 'lon'],
+            coords={'time': time_values, 'lat': lat, 'lon': lon},
+            attrs={'units': clean_units}
+        ), lon, lat
+
     def _read_gfed5ba(self, files, variables, upscaled=False):
-        """Read GFED5 NetCDF files - OPTIMIZED."""
+        """Read GFED5 NetCDF files - Logic: Normalize all to m^2 based on file units."""
         variables = variables if variables else ["Total"]
-        
-        # Pre-allocate for speed
         n_files = len(files)
         
-        # Read first file to get dimensions
+        # Open first file to establish grid and metadata
         with Dataset(files[0]) as ds:
-            var = variables[0] if variables[0] in ds.variables else list(ds.variables.keys())[0]
-            arr = ds.variables[var][:]
+            var_name = variables[0] if variables[0] in ds.variables else list(ds.variables.keys())[0]
+            sample_var = ds.variables[var_name]
+            
+            # 1. Logic: Check units attribute
+            file_units = getattr(sample_var, 'units', 'km2') # Default to km2 for GFED5
+            # If units are km2, we need to convert to m2 to match model integration
+            internal_scale = KM_SQUARED_TO_M_SQUARED if 'km' in file_units.lower() else 1.0
+            
+            # Setup grid
+            arr = sample_var[:]
             arr = arr[0] if len(arr.shape) > 2 else arr
             h, w = arr.shape
-            
-            # Pre-allocate output array
-            data_list = np.zeros((n_files, h, w), dtype=np.float32)
-            time_vals = np.zeros(n_files, dtype=np.float64)
-            
             lats = np.linspace(-90, 90, h)
             lons = np.linspace(-180, 180, w)
             
-            # Get attributes once
-            attrs = {a: getattr(ds.variables[var], a) for a in ds.variables[var].ncattrs()}
-            attrs["units"] = "m^2"
-        
-        # Process files efficiently
-        scale_factor = 1.0 if upscaled else KM_SQUARED_TO_M_SQUARED
-        
+            attrs = {a: getattr(sample_var, a) for a in sample_var.ncattrs()}
+            attrs["units"] = "m^2" # We normalize the output to m^2
+
+        data_list = np.zeros((n_files, h, w), dtype=np.float32)
+        time_vals = np.zeros(n_files, dtype=np.float64)
+
         for idx, fpath in enumerate(files):
-            try:
-                with Dataset(fpath) as ds:
-                    month_data = np.zeros((h, w), dtype=np.float32)
-                    
-                    for var in variables:
-                        if var in ds.variables:
-                            arr = ds.variables[var][:]
-                            arr = arr[0] if len(arr.shape) > 2 else arr
-                            month_data += arr.astype(np.float32)
-                    
-                    month_data *= scale_factor
-                    data_list[idx] = month_data
-                    
-                    # Extract time
-                    match = re.search(r'BA(\d{6})', os.path.basename(fpath))
-                    if match:
-                        ym = match.group(1)
-                        time_vals[idx] = int(ym[:4]) + (int(ym[4:6])-1)/12.0
-                    else:
-                        time_vals[idx] = 2001.0 + idx
-                        
-            except Exception as e:
-                print(f"Error: {e}")
-                continue
-        
+            with Dataset(fpath) as ds:
+                month_sum = np.zeros((h, w), dtype=np.float32)
+                for var in variables:
+                    if var in ds.variables:
+                        data = ds.variables[var][:]
+                        if len(data.shape) > 2: data = data[0]
+                        month_sum += data.astype(np.float32)
+                
+                # Apply the unit-based scaling
+                data_list[idx] = month_sum * internal_scale
+                
+                # Robust time extraction
+                match = re.search(r'BA(\d{4})(\d{2})', os.path.basename(fpath))
+                if match:
+                    year, month = int(match.group(1)), int(match.group(2))
+                    time_vals[idx] = year + (month - 1) / 12.0
+                else:
+                    time_vals[idx] = 2000.0 + idx
+
         return xr.DataArray(
             data_list, 
-            dims=['time','latitude','longitude'],
-            coords={'time':time_vals, 'latitude':lats, 'longitude':lons},
+            dims=['time', 'latitude', 'longitude'],
+            coords={'time': time_vals, 'latitude': lats, 'longitude': lons},
             attrs=attrs
         ), lons, lats
     

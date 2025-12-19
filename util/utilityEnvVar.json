@@ -12,7 +12,7 @@
     "folders": [
       {
         "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
-        "file_type": "ModelE_Monthly",
+        "file_type": "ModelE_monthly",
         "variables": ["BA_tree", "BA_shrub", "BA_grass"],
         "spatial_aggregation": "total",
         "temporal_aggregation_map": "annual_mean",
@@ -22,7 +22,7 @@
           "line_style": "-",
           "label": "ModelE BA",
           "target_units": "Mha",
-          "cbarmax": 0.3
+          "cbarmax": 0.5
         }
       },
       {
@@ -37,7 +37,7 @@
           "line_style": "-",
           "label": "GFED5 NAT BA",
           "target_units": "Mha",
-          "cbarmax": 0.3
+          "cbarmax": 0.5
         }
       }
     ]
