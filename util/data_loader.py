@@ -225,12 +225,37 @@ class DataLoader:
             try:
                 ds = xr.open_dataset(fpath, decode_times=False)
                 
-                # Sum variables
+                # Sum variables - PROPERLY HANDLE FILL VALUES
                 data = np.zeros((lat_size, lon_size), dtype=np.float32)
                 for var in variables:
                     if var in ds.variables:
-                        var_data = ds[var].values
+                        # Get the DataArray (not just values) to preserve metadata
+                        var_da = ds[var]
+                        
+                        # Check for fill value in attributes
+                        fill_value = var_da.attrs.get('_FillValue', None)
+                        if fill_value is None:
+                            fill_value = var_da.attrs.get('missing_value', -1e30)
+                        
+                        # Get values
+                        var_data = var_da.values.copy()
+                        
+                        # Replace fill values with 0 (for burned area, missing = no burning)
+                        if fill_value is not None:
+                            var_data[var_data == fill_value] = 0.0
+                        
+                        # Also replace any NaN with 0
+                        var_data = np.nan_to_num(var_data, nan=0.0, posinf=0.0, neginf=0.0)
+                        
+                        # Set negative values to 0 (burned area can't be negative)
                         np.maximum(var_data, 0.0, out=var_data)
+                        
+                        if idx == 0:
+                            print(f"\n  Variable '{var}':")
+                            print(f"    Fill value: {fill_value}")
+                            print(f"    After cleanup - min: {np.min(var_data):.6e}, max: {np.max(var_data):.6e}")
+                            print(f"    Non-zero count: {np.count_nonzero(var_data)}/{var_data.size}")
+                        
                         data += var_data
                 
                 # Apply scaling factor

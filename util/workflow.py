@@ -197,93 +197,87 @@ class TimeSeriesWorkflow:
             return data.time_series, data.units
     
     def _prepare_spatial_for_maps(
-        self, 
-        data: TimeSeriesData, 
+        self,
+        data: TimeSeriesData,
         config: FolderConfig
     ) -> Tuple[np.ndarray, str]:
         """
-        Prepare spatial data for mapping with proper per-area units.
-        
-        Maps should show FLUX DENSITY (e.g., kg CO2/m²/month).
-        
-        Strategy:
-        1. If data.time_mean has original per-area units → just convert mass unit
-        2. If data.time_mean was integrated → divide by grid area to get per-area
-        
+        Prepare spatial data for mapping - handles BOTH emissions AND burned area.
+
+        For emissions: Convert to per-area flux (kg CO2/m²/month)
+        For burned area: Convert to fraction of grid cell (dimensionless, 0-1)
+
         Args:
             data: TimeSeriesData object
             config: FolderConfig
-        
+
         Returns:
-            Tuple of (spatial_data_per_area, units_string)
+            Tuple of (spatial_data, units_string)
         """
         # Get the spatial data units from the xarray attrs
         spatial_data = data.time_mean.values
-        
-        # Check if time_mean still has original per-area units
-        # (This would be the case if data_loader didn't integrate spatial for maps)
         time_mean_units = data.time_mean.attrs.get('units', data.units)
-        
+
         print(f"    Preparing spatial data for '{config.figure_data.label}':")
         print(f"      Spatial data units: {time_mean_units}")
         print(f"      Time series units: {data.units}")
-        
-        # Determine if spatial data is per-area or integrated
-        is_per_area = ('m-2' in time_mean_units or 'm^-2' in time_mean_units or 
-                      '/m2' in time_mean_units or '/m^2' in time_mean_units)
-        
-        if is_per_area:
-            # Data is already per-area - just convert mass prefix if needed
-            print(f"      Data is already per-area ✓")
-            
-            # Target for maps: "kg CO2/m²/month" or similar
-            # Convert just the mass component (e.g., kg → kg, or g → kg)
-            target_map_units = "kg CO2/m²/month"  # Standard for emissions maps
-            
-            try:
-                converted_spatial, new_units = convert_to_target_units(
-                    spatial_data,
-                    time_mean_units,
-                    target_map_units
-                )
-                print(f"      Converted to: {new_units}")
-                return converted_spatial, new_units
-            except Exception as e:
-                print(f"      ⚠️  Using original units: {time_mean_units}")
-                return spatial_data, time_mean_units
-        
+
+        # Determine data type
+        is_per_area_flux = ('m-2' in time_mean_units or 'm^-2' in time_mean_units or
+                           '/m2' in time_mean_units or '/m^2' in time_mean_units)
+        is_area_unit = (time_mean_units in ['m2', 'm^2', 'ha', 'Mha', 'km2', 'km^2'])
+
+        if is_area_unit:
+            # BURNED AREA: Convert to fraction of grid cell
+            print(f"      Data type: Burned Area (area units)")
+            print(f"      Converting to fraction of grid cell...")
+
+            # Get grid cell area
+            grid_area = self.grid_calculator.calculate(
+                grid_area_shape=spatial_data.shape,
+                units='m^2'
+            )
+
+            print(f"      Grid area range: {grid_area.min():.3e} to {grid_area.max():.3e} m²")
+            print(f"      BA range (before): {spatial_data.min():.3e} to {spatial_data.max():.3e} {time_mean_units}")
+
+            # Divide burned area by grid cell area to get fraction
+            fraction = spatial_data / grid_area
+
+            print(f"      BA fraction range: {fraction.min():.6f} to {fraction.max():.6f}")
+            print(f"      Units: fraction of grid cell (0-1)")
+
+            # Check for values > 1 (shouldn't happen but good to check)
+            if fraction.max() > 1.0:
+                print(f"      ⚠️  WARNING: Some fractions > 1.0 (max={fraction.max():.3f})")
+                print(f"      This suggests burned area > grid cell area!")
+
+            return fraction, "fraction"
+
+        elif is_per_area_flux:
+            # EMISSIONS: Data is already per-area flux
+            print(f"      Data type: Per-area flux (emissions)")
+            print(f"      Keeping as per-area")
+
+            # Already correct format
+            return spatial_data, time_mean_units
+
         else:
-            # Data was integrated - need to divide by grid area
-            print(f"      Data was integrated - converting back to per-area...")
-            
+            # INTEGRATED DATA: Need to convert to per-area
+            print(f"      Data type: Integrated (converting to per-area)")
+
             # Get grid area
             grid_area = self.grid_calculator.calculate(
                 grid_area_shape=spatial_data.shape,
                 units='m^2'
             )
-            
+
             # Divide by area to get per-area flux
             spatial_per_area = spatial_data / grid_area
-            
-            # Update units to include m-2
             per_area_units = time_mean_units + "/m²"
             print(f"      Per-area units: {per_area_units}")
-            
-            # Now convert mass prefix if needed
-            target_map_units = "kg CO2/m²/month"
-            
-            try:
-                converted_spatial, new_units = convert_to_target_units(
-                    spatial_per_area,
-                    per_area_units,
-                    target_map_units
-                )
-                print(f"      Final units: {new_units}")
-                return converted_spatial, new_units
-            except Exception as e:
-                print(f"      ⚠️  Using per-area without mass conversion: {per_area_units}")
-                return spatial_per_area, per_area_units
-    
+
+            return spatial_per_area, per_area_units
     def _create_time_series_plots(self, datasets: List[tuple]):
         """Create time series plots with integrated totals - ALL datasets use common units."""
         print("\n" + "-" * 60)

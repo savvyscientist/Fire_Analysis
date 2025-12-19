@@ -25,6 +25,16 @@ MASS_PREFIXES: Dict[str, float] = {
     'Pg': 1e15,    # Petagram = 10^15 g = 10^12 kg
 }
 
+# Area unit conversions (to square meters as base)
+AREA_UNITS: Dict[str, float] = {
+    'm2': 1.0,           # square meter (base)
+    'm^2': 1.0,          # square meter (alternate notation)
+    'ha': 1e4,           # hectare = 10^4 m²
+    'Mha': 1e10,         # million hectares = 10^10 m²
+    'km2': 1e6,          # square kilometer = 10^6 m²
+    'km^2': 1e6,         # square kilometer (alternate notation)
+}
+
 
 def extract_scaling_factor(units: str) -> Tuple[float, str]:
     """
@@ -83,7 +93,7 @@ def parse_units(unit_str: str) -> Dict[str, any]:
     Parse unit string to extract components.
     
     Args:
-        unit_str: Unit string like "Tg CO2/yr" or "kg/m2/s"
+        unit_str: Unit string like "Tg CO2/yr" or "kg/m2/s" or "Mha" or "m2"
     
     Returns:
         Dictionary with parsed components
@@ -93,9 +103,18 @@ def parse_units(unit_str: str) -> Dict[str, any]:
         'mass_value': 1.0,
         'compound': None,
         'per_area': False,
+        'area_unit': None,
+        'area_value': 1.0,
         'per_time': None,
         'original': unit_str
     }
+    
+    # Check for area unit (as primary unit, not "per area")
+    for area_name, area_val in AREA_UNITS.items():
+        if unit_str == area_name or unit_str.startswith(area_name + ' ') or unit_str.startswith(area_name + '/'):
+            result['area_unit'] = area_name
+            result['area_value'] = area_val
+            break
     
     # Check for mass prefix
     for prefix, value in MASS_PREFIXES.items():
@@ -133,23 +152,41 @@ def convert_to_target_units(
     
     Args:
         data: Data array to convert
-        current_units: Current units (e.g., "kg/yr")
-        target_units: Target units (e.g., "Tg CO2/yr")
+        current_units: Current units (e.g., "kg/yr", "m2", "Mha")
+        target_units: Target units (e.g., "Tg CO2/yr", "Mha")
     
     Returns:
         Tuple of (converted_data, final_units_string)
     
-    Example:
+    Examples:
         >>> convert_to_target_units(data, "kg/yr", "Tg CO2/yr")
         (data / 1e9, "Tg CO2/yr")
+        
+        >>> convert_to_target_units(data, "m2", "Mha")
+        (data / 1e10, "Mha")
     """
     current = parse_units(current_units)
     target = parse_units(target_units)
     
     converted_data = data.copy()
     
+    # Area conversion (for burned area: m2 → Mha)
+    if target['area_unit'] and current['area_unit']:
+        # Convert from current area to target area
+        # e.g., m2 (1.0) to Mha (1e10): divide by 1e10
+        conversion_factor = current['area_value'] / target['area_value']
+        converted_data *= conversion_factor
+        print(f"  Area conversion: {current_units} → {target_units}")
+        print(f"  Factor: {conversion_factor:.6e}")
+    elif target['area_unit'] and not current['area_unit']:
+        # Assume current is in m2 if no area unit specified
+        conversion_factor = 1.0 / target['area_value']
+        converted_data *= conversion_factor
+        print(f"  Area conversion (assuming m2): {current_units} → {target_units}")
+        print(f"  Factor: {conversion_factor:.6e}")
+    
     # Mass conversion
-    if target['mass_prefix'] and current['mass_prefix']:
+    elif target['mass_prefix'] and current['mass_prefix']:
         # Convert from current mass to target mass
         conversion_factor = MASS_PREFIXES[current['mass_prefix']] / MASS_PREFIXES[target['mass_prefix']]
         converted_data *= conversion_factor
