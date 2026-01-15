@@ -10,6 +10,8 @@ import h5py
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 from netCDF4 import Dataset
+import netCDF4 as nc
+import pandas as pd
 from pathlib import Path
 
 from constants import MONTHLIST, DAYS_TO_SECONDS, KM_SQUARED_TO_M_SQUARED, MONTHLISTDICT, SECONDS_IN_A_YEAR
@@ -81,6 +83,7 @@ class DataLoader:
             'GFED4s_Monthly': lambda p,v,a,n,s,t,c=None: self._load_emis_format(p,v,n,s,t, True),
             'GFED5_Monthly': lambda p,v,a,n,s,t,c=None: self._load_emis_format(p,v,n,s,t, True),
             'FINN2.5_Monthly': lambda p,v,a,n,s,t,c=None: self._load_emis_format(p,v,n,s,t, True),
+            'WGLC_lightning': lambda p,v,a,n,s,t,c=None: self._load_format(p,v,n,s,t, self._read_WGLC_lightning, True),
         }
     
     def load_time_series(self, folder_path: str, file_type: str, variables: List[str],
@@ -146,14 +149,71 @@ class DataLoader:
         return self._process_data(combined_total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
     
     def _load_format(self, folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map, reader_func, monthly):
-        """Generic loader for ModelE formats."""
+        """
+        Generic loader for various data formats.
+   
+        This method handles data readers that return either:
+        - 3-tuple: (data, lon, lat) - for standard readers (ModelE, GFED, etc.)
+        - 5-tuple: (data, lon, lat, time_values, units) - for special readers (WGLC, etc.)
+   
+        Args:
+            folder_path: Path to data folder
+            variables: List of variable names to read
+            annual: Whether data is annual (vs monthly)
+            name: Dataset name for logging
+            spatial_aggregation: 'total' or 'mean' for spatial aggregation
+            temporal_aggregation_map: How to aggregate time for maps
+            reader_func: Function that reads the data files
+            monthly: Whether data has monthly time resolution
+       
+        Returns:
+            TimeSeriesData object or None if loading fails
+        """
+        # Get list of files
         files = obtain_netcdf_files(folder_path)
         if not files:
             return None
         files.sort()
-        total_value, lon, lat = reader_func(files, variables, monthly, name)
-        return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
-    
+   
+        # Call the reader function
+        result = reader_func(files, variables, monthly, name)
+   
+        # Check if reader returned None
+        if result is None:
+            return None
+   
+        # Handle different return formats
+        if len(result) == 3:
+            # Standard format: (data, lon, lat)
+            total_value, lon, lat = result
+       
+        elif len(result) == 5:
+            # Extended format: (data, lon, lat, time_values, units)
+            # Used by WGLC and other special loaders that provide their own time/units
+            total_value, lon, lat, time_values, units = result
+       
+        # Note: time_values and units from reader could be used here
+        # if _process_data is updated to accept them as optional arguments
+        # For now, _process_data will extract them from the xarray DataArray
+       
+    else:
+        # Unexpected format
+        print(f"  ✗ Error: Reader returned unexpected format (length {len(result)})")
+        return None
+   
+    # Check if data is valid
+    if total_value is None:
+        return None
+   
+    # Process the data into TimeSeriesData
+    return self._process_data(
+        total_value,
+        lon,
+        lat,
+        annual,
+        spatial_aggregation,
+        temporal_aggregation_map
+    ) 
     def _load_gfed4sba_format(self, folder_path, variables, annual, name, spatial_aggregation, temporal_aggregation_map, upscaled):
         """Loader for GFED4s formats."""
         files = obtain_netcdf_files(folder_path)
@@ -180,6 +240,161 @@ class DataLoader:
         files.sort()
         total_value, lon, lat = self._read_modelEinput_emis(files, variables)
         return self._process_data(total_value, lon, lat, annual, spatial_aggregation, temporal_aggregation_map)
+    
+    def _days_in_month(self, month: int, year: int) -> int:
+    """
+    Get number of days in a month, accounting for leap years.
+   
+    Args:
+        month: Month (1-12)
+        year: Year (for leap year calculation)
+       
+    Returns:
+        Number of days in the month
+    """
+    days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+   
+    # Check for leap year in February
+    if month == 2:
+        if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
+            return 29
+   
+    return days[month - 1]
+    
+    def _read_WGLC_lightning(self, files: List[str], variables: List[str], monthly: bool, name: str) -> Tuple:
+    """
+    Read WGLC (World Grid Lightning Climatology) lightning data.
+    
+    Based on read_lightning_data function but adapted for the data_loader framework.
+    
+    Args:
+        files: List of file paths (should be single file for WGLC)
+        variables: List of variables to read (typically ['density'])
+        monthly: Whether to return monthly data (True) or annual (False)
+        name: Dataset name for logging
+        
+    Returns:
+        Tuple of (data_array, lon, lat) where data_array has shape (time, lat, lon)
+    """
+    if not files:
+        print(f"  ✗ No files found for {name}")
+        return None, None, None
+    # WGLC typically has one file with all time steps
+    file_path = files[0]
+    print(f"\n=== Reading WGLC Lightning data ===")
+    print(f"File: {file_path}")
+    print(f"Variables: {variables}")
+    print(f"Monthly: {monthly}")
+    try:
+        with nc.Dataset(file_path) as netcdf_dataset:
+            # Get the density variable (lightning flash density)
+            var_name = variables[0] if variables else 'density'
+            if var_name not in netcdf_dataset.variables:
+                print(f"  ✗ Variable '{var_name}' not found in file")
+                print(f"  Available variables: {list(netcdf_dataset.variables.keys())}")
+                return None, None, None
+
+            density_variable = netcdf_dataset.variables[var_name]
+            density_data = density_variable[:]# Shape: (time, lat, lon)
+
+            # Get units
+            units = density_variable.units if hasattr(density_variable, 'units') else 'unknown'
+            print(f"Original units: {units}")
+            # Get time data
+            time_data = netcdf_dataset.variables['time'][:]
+            # Get lat/lon
+            if 'latitude' in netcdf_dataset.variables:
+                latitudes = netcdf_dataset.variables['latitude'][:]
+            else:
+                latitudes = np.linspace(-90, 90, density_data.shape[-2])
+            if 'longitude' in netcdf_dataset.variables:
+                longitudes = netcdf_dataset.variables['longitude'][:]
+            else:
+                longitudes = np.linspace(-180, 180, density_data.shape[-1])
+            print(f"Data shape: {density_data.shape}")
+            print(f"Time steps: {len(time_data)}")
+            print(f"Lat range: {latitudes.min():.2f} to {latitudes.max():.2f}")
+            print(f"Lon range: {longitudes.min():.2f} to {longitudes.max():.2f}")
+
+            # Handle fill values / missing data
+            if hasattr(density_variable, '_FillValue'):
+                fill_value = density_variable._FillValue
+                density_data = np.where(density_data == fill_value, 0.0, density_data)
+
+            # Set negative values to zero
+            density_data = np.maximum(density_data, 0.0)
+            
+            if monthly:
+                # Return monthly data
+                print(f"Returning monthly data: {density_data.shape}")
+                # Units are typically "lightning strokes km-2 d-1"
+                # Convert to monthly by multiplying by days in month
+                start_date = "2010-01-01"# Adjust based on actual data
+                date_range = pd.date_range(start_date, freq="MS", periods=len(density_data))
+                monthly_data = []
+                time_values = []
+
+                for month_idx in range(len(density_data)):
+                    current_year = date_range[month_idx].year
+                    current_month = date_range[month_idx].month
+
+                    # Get days in month
+                    days_in_month = self._days_in_month(current_month, current_year)
+
+                    # Convert from per-day to per-month
+                    monthly_value = density_data[month_idx] * days_in_month
+                    monthly_data.append(monthly_value)
+
+                   # Calculate decimal year
+                   time_values.append(current_year + (month_idx % 12) / 12.0)
+
+                final_data = np.array(monthly_data)
+                time_array = np.array(time_values)
+                final_units = "lightning strokes km-2 month-1"
+                
+            else:
+                # Return annual data
+                print(f"Aggregating to annual data...")
+                
+                # Group by year and sum
+                start_date = "2010-01-01"  # Adjust based on actual data
+                date_range = pd.date_range(start_date, freq="MS", periods=len(density_data))
+                
+                yearly_data = {}
+                for month_idx in range(len(density_data)):
+                    year = date_range[month_idx].year
+                    month = date_range[month_idx].month
+                    
+                    # Get days in month
+                    days_in_month = self._days_in_month(month, year)
+                    
+                    # Convert to monthly then accumulate
+                    monthly_value = density_data[month_idx] * days_in_month
+                    
+                    if year in yearly_data:
+                        yearly_data[year] += monthly_value
+                    else:
+                        yearly_data[year] = monthly_value.copy()
+                
+                # Convert to arrays
+                years = sorted(yearly_data.keys())
+                final_data = np.array([yearly_data[year] for year in years])
+                time_array = np.array(years, dtype=float)
+                final_units = "lightning strokes km-2 yr-1"
+                
+                print(f"Annual data shape: {final_data.shape}")
+                print(f"Years: {years}")
+            
+            print(f"Final units: {final_units}")
+            print(f"Data range: {final_data.min():.6e} to {final_data.max():.6e}")
+            
+            return final_data, longitudes, latitudes, time_array, final_units
+            
+    except Exception as e:
+        print(f"  ✗ Error reading WGLC data: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None, None
 
     def _read_ModelE(self, files, variables, monthly=False, name=None):
         """Read ModelE - Logic: Ensure fractions are integrated by setting units to m^2/m^2."""

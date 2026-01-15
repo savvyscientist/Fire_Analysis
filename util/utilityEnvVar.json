@@ -4,40 +4,40 @@
     "save_netcdf": true,
     "time_analysis_figure_data": {
       "annual": false,
-      "title": "Burned_Area",
-      "ylabel": "Mha",
+      "title": "Lightning_Flash_Density_Comparison",
+      "ylabel": "flashes/km²/yr",
       "logmapscale": false,
-      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_BA"
+      "figs_folder": "/discover/nobackup/kmezuman/plots/CCycle/Fire_analysis/fuel_lightning"
     },
     "folders": [
       {
         "folder_path": "/discover/nobackup/kmezuman/nkkm_pENINTraf_km_foliage/AIJ",
-        "file_type": "ModelE_monthly",
-        "variables": ["BA_tree", "BA_shrub", "BA_grass"],
-        "spatial_aggregation": "total",
+        "file_type": "ModelE_Monthly",
+        "variables": ["f_ignCG"],
+        "spatial_aggregation": "mean",
         "temporal_aggregation_map": "annual_mean",
         "figure_data": {
-          "color": "blue",
+          "color": "red",
           "marker": "o",
           "line_style": "-",
-          "label": "ModelE BA",
-          "target_units": "Mha",
-          "cbarmax": 0.5
+          "label": "ModelE",
+          "target_units": "flashes/km²/yr",
+          "cbarmax": 10
         }
       },
       {
-        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/GFED5/BA/upscale/analysis",
-        "file_type": "BA_GFED5",
-        "variables": ["Nat"],
-        "spatial_aggregation": "total",
+        "folder_path": "/discover/nobackup/projects/giss_ana/users/kmezuman/WGLC/regridding/upscale",
+        "file_type": "WGLC_Lightning",
+        "variables": ["density"],
+        "spatial_aggregation": "mean",
         "temporal_aggregation_map": "annual_mean",
         "figure_data": {
           "color": "black",
-          "marker": "o",
-          "line_style": "-",
-          "label": "GFED5 NAT BA",
-          "target_units": "Mha",
-          "cbarmax": 0.5
+          "marker": "s",
+          "line_style": "--",
+          "label": "WGLC",
+          "target_units": "flashes/km²/yr",
+          "cbarmax": 10
         }
       }
     ]
